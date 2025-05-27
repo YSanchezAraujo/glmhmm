@@ -115,7 +115,7 @@ def fit_glmhmm(
         key, W_gauss_key, Sigma_key = random.split(key, 3)
         x_set_gauss = [jnp.concatenate(x, axis=0) for x in x_nested_set]
         y_set_gauss = [jnp.concatenate(y, axis=0) for y in y_nested_set]
-        gamma_set_init = [jnp.ones((y.shape[0], n_states)) for y in y_set_gauss]
+        gamma_set_init = [jnp.ones(y.shape[0]) for y in y_set_gauss]
         neural_trial_info = [session_info_neural(x) for x in x_nested_set]
         first_idx_set = [jnp.asarray(nti.first_idx) for nti in neural_trial_info]
         last_idx_set = [jnp.asarray(nti.last_idx) for nti in neural_trial_info]
@@ -124,7 +124,6 @@ def fit_glmhmm(
         Sigma_init = batch_full_covariance(W_gauss_init, x_set_gauss, y_set_gauss, gamma_set_init)
         W_gauss = W_gauss_init[:, :, jnp.newaxis] + (0.1 * random.normal(W_gauss_key, (n_feat_gauss, n_reg_gauss, n_states)))
         Sigma = Sigma_init[:, :, jnp.newaxis] + (0.0 * random.normal(Sigma_key, (n_reg_gauss, n_reg_gauss, n_states)))
-
 
     print("Starting EM iterations...")
     for k in tqdm(range(max_iter), desc="EM Iteration"):
