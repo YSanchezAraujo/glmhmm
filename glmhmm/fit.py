@@ -68,9 +68,13 @@ def fit_glmhmm(
         raise ValueError("Must provide data for at least one model (Bernoulli or Gaussian).")
 
     x_set_gauss, y_set_gauss = None, None
-    if has_gauss:
+    if has_gauss and segment_gaussian:
         x_set_gauss = [jnp.concatenate(x, axis=0) for x in x_nested_set]
         y_set_gauss = [jnp.concatenate(y, axis=0) for y in y_nested_set]
+        n_feat_gauss, n_reg_gauss = x_set_gauss[0].shape[1], y_set_gauss[0].shape[1]
+    else:
+        x_set_gauss = x_nested_set 
+        y_set_gauss = y_nested_set
         n_feat_gauss, n_reg_gauss = x_set_gauss[0].shape[1], y_set_gauss[0].shape[1]
 
     if has_bern and has_gauss:

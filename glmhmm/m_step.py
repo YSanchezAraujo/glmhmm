@@ -126,7 +126,7 @@ def run_opt(
         return (iter_num == 0) | ((iter_num < max_iter) & (err >= tol))
 
     init_carry = (init_params, opt.init(init_params))
-    final_params, final_state = jax.lax.while_loop(
+    final_params, final_state = lax.while_loop(
         continuing_criterion, step, init_carry
     )
 
