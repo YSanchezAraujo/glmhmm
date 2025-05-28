@@ -120,7 +120,7 @@ def compute_expectations(
     log_gamma = log_gamma - logsumexp(log_gamma, axis=1, keepdims=True)
     gamma = jnp.exp(log_gamma)
     
-    def compute_xi_step(step: int) -> jnp.ndarray:
+    def compute_xi_step(step: int):
         log_b_lik = (log_lik_obs[step + 1, :] + log_beta[step + 1, :])[jnp.newaxis, :]
         log_xi_step_ij = log_alpha[step, :][:, jnp.newaxis] + log_A + log_b_lik - log_c[step + 1]
         return jnp.exp(log_xi_step_ij)

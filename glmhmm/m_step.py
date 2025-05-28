@@ -3,11 +3,11 @@ import jax.numpy as jnp
 from typing import List
 from functools import partial
 from typing import Tuple
-from jax import jit, lax, nn, vmap, value_and_grad
+from jax import jit, lax, nn, vmap
 import optax
+import optax.tree_utils as otu
 from collections import namedtuple
 import jax.scipy.optimize as jso
-
 
 @jit
 def bern_neg_loglik_with_prior(
@@ -74,7 +74,7 @@ def bern_m_step_jso(
     y_bern: jnp.ndarray,
     gamma_all_states: jnp.ndarray, # Shape (N, n_states)
     initial_W_bern: jnp.ndarray,   # Shape (p, n_states)
-    maxiter: int = 500,
+    num_opt_steps: int = 500,
     gtol: float = 1e-4
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """
@@ -84,7 +84,7 @@ def bern_m_step_jso(
     partial_optimizer = partial(optimize_single_state_jso,
                                  X_bern=X_bern,
                                  y_bern=y_bern,
-                                 maxiter=maxiter,
+                                 maxiter=num_opt_steps,
                                  gtol=gtol)
 
 
@@ -94,153 +94,75 @@ def bern_m_step_jso(
 
     return optimized_Ws_T.T, final_losses # (p, n_states), (n_states,)
 
+# this is mostly from the optax documentation
+# https://optax.readthedocs.io/en/latest/_collections/examples/lbfgs.html#l-bfgs-solver
+# small change to otu.tree_l2_norm
+def run_opt(
+    init_params, 
+    X_bern,
+    y_bern,
+    gamma_state,
+    max_iter, 
+    tol
+):
+    fun = partial(bern_neg_loglik_with_prior, X_bern=X_bern, y_bern=y_bern, gamma_state=gamma_state)
+    value_and_grad_fun = optax.value_and_grad_from_state(fun)
+    opt = optax.lbfgs()
 
-def optimize_single_state_weights(
-    w_initial_s: jnp.ndarray, 
-    gamma_s: jnp.ndarray,
-    X_bern: jnp.ndarray, 
+    def step(carry):
+        params, state = carry
+        value, grad = value_and_grad_fun(params, state=state)
+        updates, state = opt.update(
+            grad, state, params, value=value, grad=grad, value_fn=fun
+        )
+        params = optax.apply_updates(params, updates)
+        return params, state
+
+    def continuing_criterion(carry):
+        _, state = carry
+        iter_num = otu.tree_get(state, 'count')
+        grad = otu.tree_get(state, 'grad')
+        err = otu.tree_l2_norm(grad)
+        return (iter_num == 0) | ((iter_num < max_iter) & (err >= tol))
+
+    init_carry = (init_params, opt.init(init_params))
+    final_params, final_state = jax.lax.while_loop(
+        continuing_criterion, step, init_carry
+    )
+
+    return final_params, final_state
+
+@partial(jax.jit, static_argnames=("tol", "num_opt_steps"))
+def bern_init_opt(
+    X_bern: jnp.ndarray,
     y_bern: jnp.ndarray,
-    learning_rate: float = 1e-3, 
-    num_opt_steps: int = 100    
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    tol: float = 1e-2, 
+    num_opt_steps: int = 200    
+): 
     """
-    Optimizes weights for a single state in the GLMHMM m-step
+    Optimizes weights for a simple Bernoulli GLM (logistic regression)
+    with L2 prior and scaled loss, starting from zero weights, using optax.adam.
 
     Args:
-        w_initial_s: Initial weight vector for the current HMM state.
-        gamma_s: Responsibilities (gammas) for the current HMM state.
         X_bern: Design matrix for bernoulli observations.
-        y_bern: Binary response vector (0 or 1).
+        y_bern: Binary response vector (0 or 1).        
         learning_rate: Learning rate for the optimizer.
         num_opt_steps: Number of optimization steps.
 
     Returns:
-        A tuple containing:
-            - final_params: Optimized parameter vector (frozen after convergence).
-            - final_loss: Loss value at final_params.
     """
-    
-    loss_fn_s = partial(
-        bern_neg_loglik_with_prior, X_bern=X_bern, y_bern=y_bern, gamma_state=gamma_s
-    )
-    value_and_grad_fn = jax.value_and_grad(loss_fn_s)
-    optimizer = optax.adam(learning_rate=learning_rate)
-    opt_state_init = optimizer.init(w_initial_s)
-    params_init = w_initial_s
+    gamma_state_ones = jnp.ones(X_bern.shape[0], dtype=X_bern.dtype)
+    initial_w = jnp.zeros(X_bern.shape[1], dtype=X_bern.dtype)
+    final_params, _ = run_opt(initial_w, X_bern, y_bern, gamma_state_ones, num_opt_steps, tol)
+    return final_params
 
-    @jit
-    def opt_step(carry, _):
-        params_carry, opt_state_carry = carry
-        loss_val, grads = value_and_grad_fn(params_carry)
-        updates, new_opt_state = optimizer.update(grads, opt_state_carry, params_carry)
-        new_params = optax.apply_updates(params_carry, updates)
-        return (new_params, new_opt_state), loss_val
-
-    (final_params, final_opt_state), losses = lax.scan(
-        opt_step,
-        (params_init, opt_state_init),
-        None,
-        length=num_opt_steps
-    )
-    
-    final_loss = losses[-1] 
-    return final_params, final_loss
-
-
-def optimize_single_state_with_stopping(
-    w_initial_s: jnp.ndarray,
-    gamma_s: jnp.ndarray,
-    X_bern: jnp.ndarray,
-    y_bern: jnp.ndarray,
-    learning_rate: float = 1e-2,
-    num_opt_steps: int = 500,
-    grad_tolerance: float = 1e-2
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
-    """
-    Optimizes weights for a single state using Adam, stopping updates
-    after convergence based on gradient norm.
-
-    Args:
-        w_initial_s: Initial weight vector for the current HMM state.
-        gamma_s: Responsibilities (gammas) for the current HMM state.
-        X_bern: Design matrix for bernoulli observations.
-        y_bern: Binary response vector (0 or 1).
-        learning_rate: Learning rate for the Adam optimizer.
-        num_opt_steps: Maximum number of optimization steps.
-        grad_tolerance: L2 norm of gradients below which optimization
-                        updates are stopped.
-
-    Returns:
-        A tuple containing:
-            - final_params: Optimized parameter vector (frozen after convergence).
-            - final_loss: Loss value at final_params.
-    """
-
-    loss_fn_s = partial(
-        bern_neg_loglik_with_prior, X_bern=X_bern, y_bern=y_bern, gamma_state=gamma_s
-    )
-    value_and_grad_fn = value_and_grad(loss_fn_s)
-
-    optimizer = optax.adam(learning_rate=learning_rate)
-    opt_state_init = optimizer.init(w_initial_s)
-    params_init = w_initial_s
-
-    initial_already_converged = jnp.array(False)
-    initial_iter_converged = jnp.array(num_opt_steps, dtype=jnp.int32)
-    initial_carry = (params_init, opt_state_init, initial_already_converged, initial_iter_converged)
-
-    @jit
-    def opt_step(carry, iter_idx_0_based: int):
-        current_params, current_opt_state, prev_already_converged, prev_iter_converged = carry
-
-        loss_val, grads = value_and_grad_fn(current_params)
-        grad_norm = jnp.linalg.norm(grads)
-
-        is_newly_converged_this_step = (grad_norm < grad_tolerance) & (~prev_already_converged)
-
-        now_converged_for_next_carry = prev_already_converged | is_newly_converged_this_step
-
-        iter_converged_for_next_carry = lax.select(
-            is_newly_converged_this_step,
-            iter_idx_0_based,
-            prev_iter_converged
-        )
-
-        updates, opt_state_after_update = optimizer.update(grads, current_opt_state, current_params)
-        params_after_update = optax.apply_updates(current_params, updates)
-
-
-        next_params = jax.tree_util.tree_map(
-            lambda old_p, new_p: lax.select(prev_already_converged, old_p, new_p),
-            current_params,
-            params_after_update
-        )
-
-        next_opt_state = jax.tree_util.tree_map(
-            lambda old_os, new_os: lax.select(prev_already_converged, old_os, new_os),
-            current_opt_state,
-            opt_state_after_update
-        )
-
-        next_carry = (next_params, next_opt_state, now_converged_for_next_carry, iter_converged_for_next_carry)
-        return next_carry, loss_val
-
-    (final_params, _, _, _), _ = lax.scan(
-        opt_step,
-        initial_carry,
-        jnp.arange(num_opt_steps, dtype=jnp.int32)
-    )
-
-    final_loss = loss_fn_s(final_params)
-    return final_params, final_loss
-
-@partial(jax.jit, static_argnames=("learning_rate", "num_opt_steps")) 
+@partial(jax.jit, static_argnames=("tol", "num_opt_steps")) 
 def bern_m_step_optax( 
     X_bern: jnp.ndarray,
     y_bern: jnp.ndarray,
     gamma_all_states: jnp.ndarray, 
     initial_W_bern: jnp.ndarray,
-    learning_rate: float = 1e-2,
+    tol: float = 1e-2,
     num_opt_steps: int = 2000
 ) -> Tuple[jnp.ndarray, jnp.ndarray]: 
     """
@@ -257,79 +179,16 @@ def bern_m_step_optax(
     Returns:
         Estimated parameter vectors, and the final losses from the optimizer
     """
-    
-    partial_optimizer = partial(optimize_single_state_with_stopping,
-                                 learning_rate=learning_rate,
-                                 num_opt_steps=num_opt_steps)
                                  
     optimizer = vmap(
-        partial_optimizer, in_axes=(0, 0, None, None) 
+        run_opt, in_axes=(0, None, None, 0, None, None) 
     )
 
     optimized_Ws_T, final_losses_per_state = optimizer(
-        initial_W_bern.T, gamma_all_states.T, X_bern, y_bern
+        initial_W_bern.T, X_bern, y_bern, gamma_all_states.T, num_opt_steps, tol
     )
 
     return optimized_Ws_T.T, final_losses_per_state
-
-@partial(jax.jit, static_argnames=("learning_rate", "num_opt_steps"))
-def bern_init_opt(
-    X_bern: jnp.ndarray,
-    y_bern: jnp.ndarray,
-    learning_rate: float = 1e-3, 
-    num_opt_steps: int = 200    
-): 
-    """
-    Optimizes weights for a simple Bernoulli GLM (logistic regression)
-    with L2 prior and scaled loss, starting from zero weights, using optax.adam.
-
-    Args:
-        X_bern: Design matrix for bernoulli observations.
-        y_bern: Binary response vector (0 or 1).        
-        learning_rate: Learning rate for the optimizer.
-        num_opt_steps: Number of optimization steps.
-
-
-    Returns:
-    """
-    gamma_state_ones = jnp.ones(X_bern.shape[0], dtype=X_bern.dtype)
-
-    loss_fn = partial(bern_neg_loglik_with_prior, 
-                      X_bern=X_bern,
-                      y_bern=y_bern,
-                      gamma_state=gamma_state_ones)
-    value_and_grad_fn = jax.value_and_grad(loss_fn)
-
-    initial_w = jnp.zeros(X_bern.shape[1], dtype=X_bern.dtype)
-    
-    optimizer = optax.adam(learning_rate=learning_rate)
-    opt_state_init = optimizer.init(initial_w)
-    params_init = initial_w
-
-    @jit
-    def opt_step_init(carry, _):
-        params_carry, opt_state_carry = carry
-        loss_val, grads = value_and_grad_fn(params_carry)
-        grads = jax.tree.map(lambda g: jnp.where(jnp.isnan(g) | jnp.isinf(g), 0.0, g), grads)
-
-        updates, new_opt_state = optimizer.update(grads, opt_state_carry, params_carry)
-        new_params = optax.apply_updates(params_carry, updates)
-        return (new_params, new_opt_state), loss_val
-        
-    (final_params, _), losses = lax.scan(
-        opt_step_init,
-        (params_init, opt_state_init),
-        None, 
-        length=num_opt_steps
-    )
-    final_loss = losses[-1]
-    
-    initial_loss = loss_fn(initial_w)
-    success_heuristic = (final_loss < initial_loss - 1e-3) & \
-                        (~jnp.isnan(final_loss)) & \
-                        (~jnp.isinf(final_loss))
-
-    return final_params, success_heuristic.astype(jnp.bool_)
 
 
 @jit
@@ -484,8 +343,8 @@ def batch_m_step_updates(
         Xsz = X[:, :, None] * sqrt_G[:, None, :] # (Nk, p, n_states)
         Ysz = Y[:, :, None] * sqrt_G[:, None, :] # (Nk, m, n_states)
 
-        Sz_XX_accum += jnp.einsum('ipk,iqk->pqk', Xsz, Xsz)
-        Sz_XY_accum += jnp.einsum('ipk,imk->pmk', Xsz, Ysz)
+        Sz_XX_accum += jnp.einsum('ipk,iqk->pqk', Xsz, Xsz, optimize="optimal")
+        Sz_XY_accum += jnp.einsum('ipk,imk->pmk', Xsz, Ysz, optimize="optimal")
         sum_of_gamma_accum += jnp.sum(G, axis=0)
 
     ridge_penalty = ridge_pen * jnp.eye(p, dtype=dtype)
@@ -502,7 +361,7 @@ def batch_m_step_updates(
         M = jnp.einsum('ip,pmk->imk', X, W) # (Nk, m, n_states)
         residuals = Y[:, :, None] - M # (Nk, m, n_states)
         weighted_residuals = residuals * jnp.sqrt(G)[:, None, :] # (Nk, m, n_states)
-        sum_sq_resid_all += jnp.einsum('imk,ink->mnk', weighted_residuals, weighted_residuals)
+        sum_sq_resid_all += jnp.einsum('imk,ink->mnk', weighted_residuals, weighted_residuals, optimize="optimal")
 
     safe_sum_of_gamma = jnp.maximum(sum_of_gamma_accum, 1e-9)
     Sigma = sum_sq_resid_all / safe_sum_of_gamma[None, None, :]
