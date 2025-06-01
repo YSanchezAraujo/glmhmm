@@ -88,7 +88,7 @@ def compute_log_backward_message(
 
     return log_beta
 
-@jax.jit
+@jit
 def compute_expectations(
     log_alpha: jnp.ndarray,
     log_beta: jnp.ndarray,
@@ -111,7 +111,6 @@ def compute_expectations(
             - 'xi_summed': Expected transitions sum_t xi_t(i,j),
                            shape (n_states, n_states). If not transposed, xi_summed[i,j]
                            is the expected number of transitions from state i to state j.
-                           The original code had a .T, which is kept here.
             - 'gamma': Expected states P(z_t=i | O), shape (n_steps, n_states).
     """
     n_steps, _ = log_lik_obs.shape
