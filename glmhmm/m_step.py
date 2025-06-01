@@ -132,7 +132,7 @@ def run_opt(
 
     return final_params, final_state
 
-@partial(jax.jit, static_argnames=("tol", "num_opt_steps"))
+@partial(jit, static_argnames=("tol", "num_opt_steps"))
 def bern_init_opt(
     X_bern: jnp.ndarray,
     y_bern: jnp.ndarray,
@@ -156,7 +156,7 @@ def bern_init_opt(
     final_params, _ = run_opt(initial_w, X_bern, y_bern, gamma_state_ones, num_opt_steps, tol)
     return final_params
 
-@partial(jax.jit, static_argnames=("tol", "num_opt_steps")) 
+@partial(jit, static_argnames=("tol", "num_opt_steps")) 
 def bern_m_step_optax( 
     X_bern: jnp.ndarray,
     y_bern: jnp.ndarray,
@@ -314,7 +314,7 @@ def batch_full_covariance(
     return Sigma
 
 
-@partial(jax.jit, static_argnames=("p", "m", "n_states", "ridge_pen", "jitter"))
+@partial(jit, static_argnames=("p", "m", "n_states", "ridge_pen", "jitter"))
 def batch_m_step_updates(
     X_gauss_set: List[jnp.ndarray],
     Y_gauss_set: List[jnp.ndarray],
