@@ -14,13 +14,15 @@ from .emissions import (gaussian_glmhmm_loglikelihoods,
                         bernoulli_glmhmm_loglikelihood)
 
 from .m_step import *
-from .utils import session_info_neural
+from .utils import session_info_neural, compute_boundaries
 
 
 def fit_glmhmm(
     n_states: int,
     dir_diag: float,
     seed: int,
+    # input driven transition data (required)
+    x_trans_set: List[jnp.ndarray],
     # Gaussian data (optional)
     x_nested_set: Optional[List[List[jnp.ndarray]]] = None,
     y_nested_set: Optional[List[List[jnp.ndarray]]] = None,
@@ -91,19 +93,30 @@ def fit_glmhmm(
                  raise ValueError(f"Sequence {i}: Bernoulli length ({x_set_bern[i].shape[0]}) "
                                   f"must match Gaussian length ({gauss_len}) "
                                   f"for segment_gaussian={segment_gaussian}.")
-    elif has_bern:
-        batch_size = len(x_set_bern)
-    else: # has_gauss
-        batch_size = len(x_nested_set)
+
+    batch_size = len(x_trans_set)
 
     lml = []
     lml_prev = -jnp.inf
     key = random.PRNGKey(seed)
+    key, key_theta = random.split(key, 2)
 
-    dirichlet_prior = jnp.ones((n_states, n_states)) + dir_diag * jnp.eye(n_states)
-    A_numerator = jnp.ones((n_states, n_states)) + dirichlet_prior
-    A_denominator = jnp.sum(A_numerator, axis=1, keepdims=True)
-    A = A_numerator / A_denominator
+    x_trans_concat = jnp.concatenate(x_trans_set, axis=0)
+    n_trans_steps, n_feat_trans = x_trans_concat.shape
+    xi_over_time = jnp.ones((n_trans_steps, n_states, n_states))
+    theta = random.normal(key_theta, (n_feat_trans, n_states, n_states))
+    #theta, _ = transitions_m_step_optax(x_trans_concat, xi_over_time, theta)
+    A = compute_A_from_theta_and_inputs(x_trans_concat, theta)
+
+    # we will need the boundary conditions for later use
+    A_inds = compute_boundaries(x_trans_set)
+
+    # I'm not sure how to use the dirichet prior just yet
+    #dirichlet_prior = jnp.ones((n_states, n_states)) + dir_diag * jnp.eye(n_states)
+
+    #A_numerator = jnp.ones((n_total_steps, n_states, n_states)) + dirichlet_prior[jnp.newaxis, :, :]
+    #A_denominator = jnp.sum(A_numerator, axis=1, keepdims=True)
+    #A = A_numerator / A_denominator
     log_A = jnp.log(A)
     pi0 = jnp.ones(n_states) / n_states
     log_pi0 = jnp.log(pi0)
@@ -137,7 +150,7 @@ def fit_glmhmm(
 
     print("Starting EM iterations...")
     for k in tqdm(range(max_iter), desc="EM Iteration"):
-        xi_total = jnp.zeros((n_states, n_states))
+        #xi_over_time = jnp.zeros((n_total_steps, n_states, n_states))
         gamma_set_all = []
         pi0_total = jnp.zeros(n_states)
         lml_total = 0.0
@@ -164,11 +177,11 @@ def fit_glmhmm(
                     ll_gauss = raw_ll_gauss.T
 
             ll = ll_bern + ll_gauss 
-            log_alpha, log_c = compute_log_forward_message(ll, log_pi0, log_A)
-            log_beta = compute_log_backward_message(ll, log_A, log_c)
-            xi_i, gamma_i = compute_expectations(log_alpha, log_beta, log_c, ll, log_A)
+            log_alpha, log_c = compute_log_forward_message(ll, log_pi0, log_A[A_inds.first:A_inds.last, :, :])
+            log_beta = compute_log_backward_message(ll, log_A[A_inds.first:A_inds.last, :, :], log_c)
+            xi_i, gamma_i = compute_expectations(log_alpha, log_beta, log_c, ll, log_A[A_inds.first:A_inds.last, :, :])
 
-            xi_total += xi_i
+            xi_over_time.at[A_inds.first:A_inds.last, :, :].set(xi_i)
             gamma_set_all.append(gamma_i)
             pi0_total += gamma_i[0, :]
             lml_total += jnp.sum(log_c)
@@ -181,9 +194,11 @@ def fit_glmhmm(
                     gamma_set_gauss_m_step.append(gamma_i)
 
         # M-step
-        A_numerator = xi_total + dirichlet_prior
-        A_denominator = jnp.sum(A_numerator, axis=1, keepdims=True)
-        A = A_numerator / A_denominator
+        #A_numerator = xi_total + dirichlet_prior
+        #A_denominator = jnp.sum(A_numerator, axis=1, keepdims=True)
+        #A = A_numerator / A_denominator
+        theta, _ = transitions_m_step_optax(x_trans_concat, xi_over_time, theta)
+        A = compute_A_from_theta_and_inputs(x_trans_concat, theta)
         log_A = jnp.log(A)
         pi0 = pi0_total / jnp.sum(pi0_total)
         log_pi0 = jnp.log(pi0)

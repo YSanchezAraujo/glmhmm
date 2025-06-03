@@ -41,7 +41,7 @@ def compute_log_forward_message(
     def scan_step(carry, step):
         prev_log_alpha,  = carry
         log_alpha_step, log_c_step = log_normalize(
-            log_lik_obs[step, :] + logsumexp(log_A + prev_log_alpha[:, jnp.newaxis], axis=0)
+            log_lik_obs[step, :] + logsumexp(log_A[step-1, :, :] + prev_log_alpha[:, jnp.newaxis], axis=0)
             )
         return (log_alpha_step, ), (log_alpha_step, log_c_step)
 
@@ -78,7 +78,7 @@ def compute_log_backward_message(
     def scan_step(carry, step):
         prev_log_beta, = carry
         log_beta_sum = prev_log_beta + log_lik_obs[step+1, :]
-        log_beta_step = logsumexp(log_A.T + log_beta_sum[:, jnp.newaxis], axis=0) - log_c[step+1]
+        log_beta_step = logsumexp(log_A[step, :, :].T + log_beta_sum[:, jnp.newaxis], axis=0) - log_c[step+1]
         return (log_beta_step, ), log_beta_step
 
     initial_log_beta = jnp.zeros(n_states) 
@@ -108,10 +108,9 @@ def compute_expectations(
 
     Returns:
         A tuple containing:
-            - 'xi_summed': Expected transitions sum_t xi_t(i,j),
-                           shape (n_states, n_states). If not transposed, xi_summed[i,j]
+            - 'xi_over_time': Transitions sum_t xi_t(i,j),
+                           shape (n_steps, n_states). If not transposed, xi_summed[i,j]
                            is the expected number of transitions from state i to state j.
-                           The original code had a .T, which is kept here.
             - 'gamma': Expected states P(z_t=i | O), shape (n_steps, n_states).
     """
     n_steps, _ = log_lik_obs.shape
@@ -122,10 +121,9 @@ def compute_expectations(
     
     def compute_xi_step(step: int):
         log_b_lik = (log_lik_obs[step + 1, :] + log_beta[step + 1, :])[jnp.newaxis, :]
-        log_xi_step_ij = log_alpha[step, :][:, jnp.newaxis] + log_A + log_b_lik - log_c[step + 1]
+        log_xi_step_ij = log_alpha[step, :][:, jnp.newaxis] + log_A[step, :, :] + log_b_lik - log_c[step + 1]
         return jnp.exp(log_xi_step_ij)
 
     xi_over_time = jax.vmap(compute_xi_step)(jnp.arange(n_steps - 1))
-    xi_summed = jnp.sum(xi_over_time, axis=0)
 
-    return xi_summed, gamma
+    return xi_over_time, gamma

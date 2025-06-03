@@ -72,14 +72,13 @@ def optimize_single_state_jso(
 def bern_m_step_jso(
     X_bern: jnp.ndarray,
     y_bern: jnp.ndarray,
-    gamma_all_states: jnp.ndarray, # Shape (N, n_states)
-    initial_W_bern: jnp.ndarray,   # Shape (p, n_states)
+    gamma_all_states: jnp.ndarray, # (n_steps, n_states)
+    initial_W_bern: jnp.ndarray,   # (n_features, n_states)
     num_opt_steps: int = 500,
     gtol: float = 1e-4
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """
     Optimizes weights for all states using jso.minimize via vmap.
-    *** WARNING: vmap/jit compatibility with jso.minimize can be limited! ***
     """
     partial_optimizer = partial(optimize_single_state_jso,
                                  X_bern=X_bern,
@@ -97,7 +96,7 @@ def bern_m_step_jso(
 # this is mostly from the optax documentation
 # https://optax.readthedocs.io/en/latest/_collections/examples/lbfgs.html#l-bfgs-solver
 # small change to otu.tree_l2_norm
-def run_opt(
+def run_opt_bern(
     init_params, 
     X_bern,
     y_bern,
@@ -153,7 +152,7 @@ def bern_init_opt(
     """
     gamma_state_ones = jnp.ones(X_bern.shape[0], dtype=X_bern.dtype)
     initial_w = jnp.zeros(X_bern.shape[1], dtype=X_bern.dtype)
-    final_params, _ = run_opt(initial_w, X_bern, y_bern, gamma_state_ones, num_opt_steps, tol)
+    final_params, _ = run_opt_bern(initial_w, X_bern, y_bern, gamma_state_ones, num_opt_steps, tol)
     return final_params
 
 @partial(jax.jit, static_argnames=("tol", "num_opt_steps")) 
@@ -181,14 +180,105 @@ def bern_m_step_optax(
     """
                                  
     optimizer = vmap(
-        run_opt, in_axes=(0, None, None, 0, None, None) 
+        run_opt_bern, in_axes=(0, None, None, 0, None, None) 
     )
 
-    optimized_Ws_T, final_losses_per_state = optimizer(
+    optimized_Ws_T, final_state = optimizer(
         initial_W_bern.T, X_bern, y_bern, gamma_all_states.T, num_opt_steps, tol
     )
 
-    return optimized_Ws_T.T, final_losses_per_state
+    return optimized_Ws_T.T, final_state
+
+
+@jit
+def multinomial_negloglik(theta_state, U, xi_state):
+    """
+    Computes a weighted negative log likelihood of the data
+
+    Args:
+        theta_state: Matrix of weights for state i
+        U: Matrix of inputs for the transitions
+        xi_state: Matrix of transitions over time
+
+    returns:
+        Scalar valued negative log likelihood
+    """
+    logits = U @ theta_state
+    loss = optax.softmax_cross_entropy(logits, xi_state)
+    l2_penalty = 0.5 * jnp.sum(jnp.square(theta_state))
+    total_loss = jnp.sum(loss) + l2_penalty
+    return total_loss / U.shape[0]
+
+def run_opt_multinomial(
+    init_params, 
+    U,
+    xi,
+    max_iter, 
+    tol
+):
+    fun = partial(multinomial_negloglik, U=U, xi_state=xi)
+    value_and_grad_fun = optax.value_and_grad_from_state(fun)
+    opt = optax.lbfgs()
+
+    def step(carry):
+        params, state = carry
+        value, grad = value_and_grad_fun(params, state=state)
+        updates, state = opt.update(
+            grad, state, params, value=value, grad=grad, value_fn=fun
+        )
+        params = optax.apply_updates(params, updates)
+        return params, state
+
+    def continuing_criterion(carry):
+        _, state = carry
+        iter_num = otu.tree_get(state, 'count')
+        grad = otu.tree_get(state, 'grad')
+        err = otu.tree_l2_norm(grad)
+        return (iter_num == 0) | ((iter_num < max_iter) & (err >= tol))
+
+    init_carry = (init_params, opt.init(init_params))
+    final_params, final_state = lax.while_loop(
+        continuing_criterion, step, init_carry
+    )
+
+    return final_params, final_state
+
+@partial(jax.jit, static_argnames=("tol", "num_opt_steps")) 
+def transitions_m_step_optax( 
+    U: jnp.ndarray,                # (n_trans_steps, n_features), inputs
+    xi: jnp.ndarray,               # (n_trans_steps, n_states, n_states)
+    initial_theta: jnp.ndarray,    # (n_features, n_states, n_states)
+    tol: float = 1e-2,
+    num_opt_steps: int = 2000
+) -> Tuple[jnp.ndarray, jnp.ndarray]: 
+    """
+    Optimizes weights for a all states in the GLMHMM m-step, input driven transitions
+
+    Args:
+
+
+    Returns:
+        Estimated parameter matrices, and the final state from the optimizer
+    """
+                                 
+    optimizer = vmap(
+        run_opt_multinomial, in_axes=(1, None, 1, None, None) 
+    )
+
+    optimized_theta, final_state = optimizer(
+        initial_theta, U, xi, num_opt_steps, tol
+    )
+
+    return optimized_theta, final_state
+
+@jit
+def compute_A_from_theta_and_inputs(
+    U: jnp.ndarray, # (n_steps, n_features)
+    theta: jnp.ndarray # (n_features, n_states, n_states)
+):
+    logits = jnp.einsum('ij,jmn->imn', U, theta, optimize="optimal")
+    A = jax.nn.softmax(logits, axis=2)
+    return A
 
 
 @jit
