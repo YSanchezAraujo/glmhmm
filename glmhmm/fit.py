@@ -19,7 +19,7 @@ from .utils import session_info_neural, compute_boundaries
 
 def fit_glmhmm(
     n_states: int,
-    dir_diag: float,
+    dir_diag: jnp.ndarray,
     seed: int,
     # input driven transition data (required)
     x_trans_set: List[jnp.ndarray],
@@ -33,7 +33,6 @@ def fit_glmhmm(
     x_set_bern: Optional[List[jnp.ndarray]] = None,
     y_set_bern: Optional[List[jnp.ndarray]] = None,
     bern_m_step_maxiter: int = 100,
-    bern_m_step_gtol: float = 1e-2, 
     tol_optax: float = 1e-3,
     # Common EM params
     max_iter: int = 500,
@@ -197,7 +196,7 @@ def fit_glmhmm(
         #A_numerator = xi_total + dirichlet_prior
         #A_denominator = jnp.sum(A_numerator, axis=1, keepdims=True)
         #A = A_numerator / A_denominator
-        theta, _ = transitions_m_step_optax(x_trans_concat, xi_over_time, theta)
+        theta, _ = transitions_m_step_optax(x_trans_concat, xi_over_time, theta, dir_diag)
         A = compute_A_from_theta_and_inputs(x_trans_concat, theta)
         log_A = jnp.log(A)
         pi0 = pi0_total / jnp.sum(pi0_total)

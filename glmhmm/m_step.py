@@ -191,7 +191,7 @@ def bern_m_step_optax(
 
 
 @jit
-def multinomial_negloglik(theta_state, U, xi_state):
+def multinomial_negloglik(theta_state, U, xi_state, dir_diag):
     """
     Computes a weighted negative log likelihood of the data
 
@@ -199,24 +199,27 @@ def multinomial_negloglik(theta_state, U, xi_state):
         theta_state: Matrix of weights for state i
         U: Matrix of inputs for the transitions
         xi_state: Matrix of transitions over time
+        dir_diag: Array of floats, dirichlet prior penalty
 
     returns:
         Scalar valued negative log likelihood
     """
     logits = U @ theta_state
     loss = optax.softmax_cross_entropy(logits, xi_state)
-    l2_penalty = 0.5 * jnp.sum(jnp.square(theta_state))
-    total_loss = jnp.sum(loss) + l2_penalty
+    log_probs = nn.log_softmax(logits, axis=1)
+    penalty = -jnp.sum((dir_diag - 1.0)[jnp.newaxis, :] * log_probs)
+    total_loss = jnp.sum(loss) + penalty
     return total_loss / U.shape[0]
 
 def run_opt_multinomial(
     init_params, 
     U,
     xi,
+    dir_diag,
     max_iter, 
     tol
 ):
-    fun = partial(multinomial_negloglik, U=U, xi_state=xi)
+    fun = partial(multinomial_negloglik, U=U, xi_state=xi, dir_diag=dir_diag)
     value_and_grad_fun = optax.value_and_grad_from_state(fun)
     opt = optax.lbfgs()
 
@@ -248,6 +251,7 @@ def transitions_m_step_optax(
     U: jnp.ndarray,                # (n_trans_steps, n_features), inputs
     xi: jnp.ndarray,               # (n_trans_steps, n_states, n_states)
     initial_theta: jnp.ndarray,    # (n_features, n_states, n_states)
+    dir_diag: jnp.ndarray,
     tol: float = 1e-2,
     num_opt_steps: int = 2000
 ) -> Tuple[jnp.ndarray, jnp.ndarray]: 
@@ -262,11 +266,11 @@ def transitions_m_step_optax(
     """
                                  
     optimizer = vmap(
-        run_opt_multinomial, in_axes=(1, None, 1, None, None) 
+        run_opt_multinomial, in_axes=(1, None, 1, None, None, None) 
     )
 
     optimized_theta, final_state = optimizer(
-        initial_theta, U, xi, num_opt_steps, tol
+        initial_theta, U, xi, dir_diag, num_opt_steps, tol
     )
 
     return optimized_theta, final_state
