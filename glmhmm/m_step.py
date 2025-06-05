@@ -6,8 +6,7 @@ from typing import Tuple
 from jax import jit, lax, nn, vmap
 import optax
 import optax.tree_utils as otu
-from collections import namedtuple
-import jax.scipy.optimize as jso
+
 
 @jit
 def bern_neg_loglik_with_prior(
@@ -35,63 +34,6 @@ def bern_neg_loglik_with_prior(
     l2_prior = 0.5 * jnp.sum(w_bern_state**2)
     total_nll = nll_data + l2_prior
     return total_nll / X_bern.shape[0] # for stability because of optax, just incase
-
-@jit
-def optimize_single_state_jso(
-    w_initial_s: jnp.ndarray,
-    gamma_s: jnp.ndarray,
-    X_bern: jnp.ndarray,
-    y_bern: jnp.ndarray,
-    maxiter: int = 500, 
-    gtol: float = 1e-4 
-) -> namedtuple:
-    """
-    Optimizes weights for a single state using jax.scipy.optimize.minimize (BFGS).
-    """
-    loss_fn_s = partial(bern_neg_loglik_with_prior, X_bern=X_bern, y_bern=y_bern, gamma_state=gamma_s)
-
-    result = jso.minimize(
-        fun=loss_fn_s,
-        x0=w_initial_s,
-        method='BFGS',
-        options={
-            'maxiter': maxiter,
-            'gtol': gtol
-        }
-    )
-
-    opt = namedtuple('opt', ['w', 'loss', 'success', "niter"])(
-        w = result.x,
-        loss = result.fun,
-        success = result.success,
-        niter = result.nit
-    )
-
-    return opt
-
-def bern_m_step_jso(
-    X_bern: jnp.ndarray,
-    y_bern: jnp.ndarray,
-    gamma_all_states: jnp.ndarray, # (n_steps, n_states)
-    initial_W_bern: jnp.ndarray,   # (n_features, n_states)
-    num_opt_steps: int = 500,
-    gtol: float = 1e-4
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
-    """
-    Optimizes weights for all states using jso.minimize via vmap.
-    """
-    partial_optimizer = partial(optimize_single_state_jso,
-                                 X_bern=X_bern,
-                                 y_bern=y_bern,
-                                 maxiter=num_opt_steps,
-                                 gtol=gtol)
-
-
-    opt_results = vmap(partial_optimizer, in_axes=(0, 0))(initial_W_bern.T, gamma_all_states.T)
-    optimized_Ws_T = opt_results.w
-    final_losses = opt_results.loss  
-
-    return optimized_Ws_T.T, final_losses # (p, n_states), (n_states,)
 
 # this is mostly from the optax documentation
 # https://optax.readthedocs.io/en/latest/_collections/examples/lbfgs.html#l-bfgs-solver
@@ -131,7 +73,7 @@ def run_opt_bern(
 
     return final_params, final_state
 
-@partial(jax.jit, static_argnames=("tol", "num_opt_steps"))
+@partial(jit, static_argnames=("tol", "num_opt_steps"))
 def bern_init_opt(
     X_bern: jnp.ndarray,
     y_bern: jnp.ndarray,
@@ -155,7 +97,7 @@ def bern_init_opt(
     final_params, _ = run_opt_bern(initial_w, X_bern, y_bern, gamma_state_ones, num_opt_steps, tol)
     return final_params
 
-@partial(jax.jit, static_argnames=("tol", "num_opt_steps")) 
+@partial(jit, static_argnames=("tol", "num_opt_steps")) 
 def bern_m_step_optax( 
     X_bern: jnp.ndarray,
     y_bern: jnp.ndarray,
@@ -246,7 +188,7 @@ def run_opt_multinomial(
 
     return final_params, final_state
 
-@partial(jax.jit, static_argnames=("tol", "num_opt_steps")) 
+@partial(jit, static_argnames=("tol", "num_opt_steps")) 
 def transitions_m_step_optax( 
     U: jnp.ndarray,                # (n_trans_steps, n_features), inputs
     xi: jnp.ndarray,               # (n_trans_steps, n_states, n_states)
