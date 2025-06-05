@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 from jax import random, vmap
-from typing import List, NamedTuple, Optional
+from typing import List, NamedTuple, Optional, Union
 from collections import namedtuple
 from tqdm import tqdm
 from jax.experimental import sparse
@@ -14,7 +14,7 @@ from .emissions import (gaussian_glmhmm_loglikelihoods,
                         bernoulli_glmhmm_loglikelihood)
 
 from .m_step import *
-from .utils import session_info_neural, compute_boundaries
+from .utils import compute_boundaries
 
 
 def fit_glmhmm(
@@ -24,8 +24,8 @@ def fit_glmhmm(
     # input driven transition data (required)
     x_trans_set: List[jnp.ndarray],
     # Gaussian data (optional)
-    x_nested_set: Optional[List[List[jnp.ndarray]]] = None,
-    y_nested_set: Optional[List[List[jnp.ndarray]]] = None,
+    x_nested_set: Optional[Union[List[List[jnp.ndarray]], List[jnp.ndarray]]] = None,
+    y_nested_set: Optional[Union[List[List[jnp.ndarray]], List[jnp.ndarray]]] = None,
     segment_gaussian: bool = True, 
     ridge_pen: float = 1.0,
     jitter: float = 1e-5,
@@ -45,8 +45,9 @@ def fit_glmhmm(
         n_states: Number of hidden states.
         dir_diag: Diagonal enhancement for Dirichlet prior on transitions.
         seed: Random seed.
-        x_nested_set: Gaussian model input features (nested list per session/trial).
-        y_nested_set: Gaussian model observations (nested list per session/trial).
+        x_trans_set: Input driven transition features (list per sequence).
+        x_nested_set: Gaussian model input features (nested list per session/trial OR list per sequence depending on segment_gaussian).
+        y_nested_set: Gaussian model observations (nested list per session/trial OR list per sequence depending on segment_gaussian).
         segment_gaussian: If True, sum Gaussian likelihoods over trials/segments.
                           If False, treat each Gaussian time point individually.
         ridge_pen: Ridge penalty for Gaussian M-step.
@@ -54,7 +55,6 @@ def fit_glmhmm(
         x_set_bern: Bernoulli model input features (list per sequence).
         y_set_bern: Bernoulli model observations (list per sequence).
         bern_m_step_maxiter: Max iterations for Bernoulli M-step optimizer.
-        bern_m_step_gtol: Gradient tolerance for Bernoulli M-step optimizer.
         bern_lr_optax: Learning rate for Bernoulli M-step optimizer.
         max_iter: Maximum EM iterations.
         em_tol: Log-marginal likelihood tolerance for convergence.
@@ -99,23 +99,13 @@ def fit_glmhmm(
     lml_prev = -jnp.inf
     key = random.PRNGKey(seed)
     key, key_theta = random.split(key, 2)
+    A_inds = compute_boundaries(x_trans_set)
 
     x_trans_concat = jnp.concatenate(x_trans_set, axis=0)
     n_trans_steps, n_feat_trans = x_trans_concat.shape
-    xi_over_time = jnp.ones((n_trans_steps, n_states, n_states))
+    xi_over_time = jnp.zeros((n_trans_steps, n_states, n_states))
     theta = random.normal(key_theta, (n_feat_trans, n_states, n_states))
-    #theta, _ = transitions_m_step_optax(x_trans_concat, xi_over_time, theta)
     A = compute_A_from_theta_and_inputs(x_trans_concat, theta)
-
-    # we will need the boundary conditions for later use
-    A_inds = compute_boundaries(x_trans_set)
-
-    # I'm not sure how to use the dirichet prior just yet
-    #dirichlet_prior = jnp.ones((n_states, n_states)) + dir_diag * jnp.eye(n_states)
-
-    #A_numerator = jnp.ones((n_total_steps, n_states, n_states)) + dirichlet_prior[jnp.newaxis, :, :]
-    #A_denominator = jnp.sum(A_numerator, axis=1, keepdims=True)
-    #A = A_numerator / A_denominator
     log_A = jnp.log(A)
     pi0 = jnp.ones(n_states) / n_states
     log_pi0 = jnp.log(pi0)
@@ -143,13 +133,12 @@ def fit_glmhmm(
         W_gauss = W_gauss_init[:, :, jnp.newaxis] + (0.1 * random.normal(W_gauss_key, (n_feat_gauss, n_reg_gauss, n_states)))
         Sigma = Sigma_init[:, :, jnp.newaxis] + (jitter * random.normal(Sigma_key, (n_reg_gauss, n_reg_gauss, n_states)))
         if segment_gaussian:
-            neural_trial_info = [session_info_neural(x) for x in x_nested_set]
+            neural_trial_info = [compute_boundaries(x) for x in x_nested_set]
             first_idx_set = [jnp.asarray(nti.first_idx) for nti in neural_trial_info]
             last_idx_set = [jnp.asarray(nti.last_idx) for nti in neural_trial_info]
 
     print("Starting EM iterations...")
     for k in tqdm(range(max_iter), desc="EM Iteration"):
-        #xi_over_time = jnp.zeros((n_total_steps, n_states, n_states))
         gamma_set_all = []
         pi0_total = jnp.zeros(n_states)
         lml_total = 0.0
@@ -176,11 +165,11 @@ def fit_glmhmm(
                     ll_gauss = raw_ll_gauss.T
 
             ll = ll_bern + ll_gauss 
-            log_alpha, log_c = compute_log_forward_message(ll, log_pi0, log_A[A_inds.first:A_inds.last, :, :])
-            log_beta = compute_log_backward_message(ll, log_A[A_inds.first:A_inds.last, :, :], log_c)
-            xi_i, gamma_i = compute_expectations(log_alpha, log_beta, log_c, ll, log_A[A_inds.first:A_inds.last, :, :])
+            log_alpha, log_c = compute_log_forward_message(ll, log_pi0, log_A[A_inds.first_idx:A_inds.last_idx, :, :])
+            log_beta = compute_log_backward_message(ll, log_A[A_inds.first_idx:A_inds.last_idx, :, :], log_c)
+            xi_i, gamma_i = compute_expectations(log_alpha, log_beta, log_c, ll, log_A[A_inds.first_idx:A_inds.last_idx, :, :])
 
-            xi_over_time.at[A_inds.first:A_inds.last, :, :].set(xi_i)
+            xi_over_time.at[A_inds.first_idx:A_inds.last_idx, :, :].set(xi_i)
             gamma_set_all.append(gamma_i)
             pi0_total += gamma_i[0, :]
             lml_total += jnp.sum(log_c)
@@ -193,9 +182,6 @@ def fit_glmhmm(
                     gamma_set_gauss_m_step.append(gamma_i)
 
         # M-step
-        #A_numerator = xi_total + dirichlet_prior
-        #A_denominator = jnp.sum(A_numerator, axis=1, keepdims=True)
-        #A = A_numerator / A_denominator
         theta, _ = transitions_m_step_optax(x_trans_concat, xi_over_time, theta, dir_diag)
         A = compute_A_from_theta_and_inputs(x_trans_concat, theta)
         log_A = jnp.log(A)
@@ -221,12 +207,12 @@ def fit_glmhmm(
             break
         lml_prev = lml_total
 
-    output_fields = ["A", "pi0", "lml"]
+    output_fields = ["transition_matrix", "initial_transition", "log_marginal_likelihood"]
     output_values = [A, pi0, lml]
 
-    output_fields.append("gamma_list")
+    output_fields.append("state_posterior_list")
     output_values.append(gamma_set_all)
-    output_fields.append("gamma_concat")
+    output_fields.append("state_posterior_concat")
     output_values.append(gamma) 
 
     if has_bern:
@@ -236,13 +222,12 @@ def fit_glmhmm(
         output_values.extend([first_ii_bern, last_ii_bern])
 
     if has_gauss:
-        output_fields.extend(["W_gauss", "Sigma"])
+        output_fields.extend(["W_gauss", "covariance"])
         output_values.extend([W_gauss, Sigma])
         if segment_gaussian:
             output_fields.append("trial_info")
             output_values.append(neural_trial_info)
 
-    OutputTuple = namedtuple('glmhmm_fit', output_fields)
-    output = OutputTuple(*output_values)
+    output = namedtuple('glmhmm_fit', output_fields)(*output_values)
 
     return output
