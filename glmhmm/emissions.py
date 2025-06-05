@@ -79,7 +79,7 @@ def normalized_gauss_loglikelihoods(
     Returns:
         Normalized loglikelihoods of gaussian segements, 1-d array
     """
-    n_segments = len(last_idx_set)
+    n_segments = last_idx_set.shape[0]
     segment_lens = last_idx_set - first_idx_set
     segment_ids = jnp.repeat(jnp.arange(n_segments), segment_lens)
     segment_sums = segment_sum(all_loglikelihoods, segment_ids, num_segments = n_segments)
