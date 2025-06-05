@@ -88,7 +88,7 @@ def compute_log_backward_message(
 
     return log_beta
 
-@jax.jit
+@jit
 def compute_expectations(
     log_alpha: jnp.ndarray,
     log_beta: jnp.ndarray,
@@ -127,3 +127,4 @@ def compute_expectations(
     xi_over_time = jax.vmap(compute_xi_step)(jnp.arange(n_steps - 1))
 
     return xi_over_time, gamma
+
