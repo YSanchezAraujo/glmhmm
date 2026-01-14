@@ -1,0 +1,322 @@
+import jax.numpy as jnp
+from jax import jit
+from tqdm import tqdm
+from typing import NamedTuple, List, Tuple, Optional
+
+from .structs import GLMHMMParams, GLMHMMData, GLMHMMConfig
+
+from .emissions import (bernoulli_glmhmm_loglikelihood, 
+                        multinomial_glmhmm_loglikelihood,
+                        negbin_glmhmm_loglikelihood, 
+                        gamma_glmhmm_loglikelihood,
+                        gaussian_glmhmm_loglikelihoods,
+                        normalized_gauss_loglikelihoods)
+
+from .hmm_core import (compute_log_forward_message, 
+                       compute_log_backward_message, 
+                       compute_expectations)
+
+from .m_step import *
+from .utils import compute_A_from_theta_and_inputs
+from .initialize import initialize_params
+
+@jit
+def compute_total_emissions(params: GLMHMMParams, x_b, y_b, x_mn, y_mn, x_nb, y_nb, x_gm, y_gm, x_gs, y_gs, gs_first, gs_last, gs_segment_ids) -> jnp.ndarray:
+    """
+    Computes total log-likelihoods by summing across all active emission distributions.
+    """
+
+    if x_b is not None:
+        T = x_b.shape[0]
+    elif x_mn is not None:
+        T = x_mn.shape[0]
+    elif x_nb is not None:
+        T = x_nb.shape[0]
+    elif x_gm is not None:
+        T = x_gm.shape[0]
+    elif gs_first is not None:
+        T = gs_first.shape[0]
+    elif x_gs is not None:
+        T = x_gs.shape[0]
+    else:
+        T = 0 
+
+    K = params.log_pi0.shape[0]
+    ll_total = jnp.zeros((T, K))
+
+    if params.W_bern is not None and x_b is not None:
+        ll_total += bernoulli_glmhmm_loglikelihood(x_b, y_b, params.W_bern)
+
+    if params.W_multinom is not None and x_mn is not None:
+        ll_total += multinomial_glmhmm_loglikelihood(x_mn, y_mn, params.W_multinom)
+        
+    if params.W_negbin is not None and x_nb is not None:
+         ll_total += negbin_glmhmm_loglikelihood(x_nb, y_nb, params.W_negbin, params.phi_negbin)
+
+    if params.W_gamma is not None and x_gm is not None:
+         ll_total += gamma_glmhmm_loglikelihood(x_gm, y_gm, params.W_gamma, params.alpha_gamma)
+         
+    if params.W_gauss is not None and x_gs is not None:
+        loglik_fn = jax.vmap(gaussian_glmhmm_loglikelihoods, in_axes=(None, None, 2, 2), out_axes=1)
+        raw_ll = loglik_fn(x_gs, y_gs, params.W_gauss, params.Sigma_gauss) # (N_total, K)
+        
+        has_other = False
+        if x_b is not None: 
+            has_other = True
+        elif x_mn is not None: 
+            has_other = True
+        elif x_nb is not None: 
+            has_other = True
+        elif x_gm is not None: 
+            has_other = True
+        
+        do_normalize = has_other
+        n_regions = y_gs.shape[1]
+        
+        if gs_first is not None:
+             norm_fn = jax.vmap(normalized_gauss_loglikelihoods, in_axes=(1, None, None, None, None, None), out_axes=1)
+             normalized_ll = norm_fn(raw_ll, gs_first, gs_last, n_regions, gs_segment_ids, do_normalize) # (T, K)
+        else:
+             normalized_ll = raw_ll
+        
+        ll_total += normalized_ll
+    
+    return ll_total
+
+def e_step(params: GLMHMMParams, data: GLMHMMData):
+    """
+    Performs the E-step of the EM algorithm for GLMHMM.
+    
+    Computes posterior probabilities (responsibilities) for states and transitions
+    using the forward-backward algorithm. Processes all sequences in the dataset.
+    
+    Args:
+        params: Current GLMHMM parameters.
+        data: Dataset containing all observation sequences and covariates.
+    
+    Returns:
+        gammas: List of state responsibilities for each sequence.
+                Each element has shape (T_i, K) where T_i is the length of sequence i.
+        xis: List of transition responsibilities for each sequence.
+             Each element has shape (T_i-1, K, K).
+        total_lml: Total log marginal likelihood across all sequences (scalar).
+    """
+    total_lml = 0.0
+    gammas, xis = [], []
+    
+    seq_sources = [data.x_trans, data.x_bern, data.x_multinom, data.x_negbin, data.x_gamma, data.x_gauss]
+    n_sequences = next(len(s) for s in seq_sources if s is not None)
+
+    for i in range(n_sequences): 
+        x_b  = data.x_bern[i] if data.x_bern is not None else None
+        y_b  = data.y_bern[i] if data.y_bern is not None else None
+        x_mn = data.x_multinom[i] if data.x_multinom is not None else None
+        y_mn = data.y_multinom[i] if data.y_multinom is not None else None
+        x_nb = data.x_negbin[i] if data.x_negbin is not None else None
+        y_nb = data.y_negbin[i] if data.y_negbin is not None else None
+        x_gm  = data.x_gamma[i] if data.x_gamma is not None else None
+        y_gm  = data.y_gamma[i] if data.y_gamma is not None else None
+        if data.x_gauss is not None:
+             if isinstance(data.x_gauss[i], (list, tuple)):
+                 x_gs = jnp.concatenate(data.x_gauss[i], axis=0)
+                 y_gs = jnp.concatenate(data.y_gauss[i], axis=0)
+             else:
+                 x_gs = data.x_gauss[i]
+                 y_gs = data.y_gauss[i]
+        else:
+             x_gs, y_gs = None, None
+        gs_first = data.gauss_first_idx[i] if data.gauss_first_idx else None
+        gs_last = data.gauss_last_idx[i] if data.gauss_last_idx else None
+        
+        gs_segment_ids = None
+        if gs_first is not None:
+            n_segs = gs_first.shape[0]
+            lengths = gs_last - gs_first
+            gs_segment_ids = jnp.repeat(jnp.arange(n_segs), lengths)
+
+        ll_t = compute_total_emissions(params, x_b, y_b, x_mn, y_mn, x_nb, y_nb, x_gm, y_gm, x_gs, y_gs, gs_first, gs_last, gs_segment_ids)
+        
+        if params.theta is not None:
+            A_t = compute_A_from_theta_and_inputs(data.x_trans[i], params.theta)
+            log_A_t = jnp.log(A_t)
+        else:
+            T = ll_t.shape[0]
+            K = params.log_A.shape[0]
+            log_A_t = jnp.broadcast_to(params.log_A[jnp.newaxis, :, :], (T, K, K))
+            
+        log_alpha, log_c = compute_log_forward_message(ll_t, params.log_pi0, log_A_t)
+        log_beta = compute_log_backward_message(ll_t, log_A_t, log_c)
+        xi_t, gamma_t = compute_expectations(log_alpha, log_beta, log_c, ll_t, log_A_t)
+        
+        total_lml += jnp.sum(log_c)
+        gammas.append(gamma_t)
+        xis.append(xi_t)
+        
+    return gammas, xis, total_lml
+
+def m_step(params: GLMHMMParams, data: GLMHMMData, gammas: List[jnp.ndarray], xis: List[jnp.ndarray], config: GLMHMMConfig) -> GLMHMMParams:
+    """
+    Performs the M-step of the EM algorithm for GLMHMM.
+    
+    Updates all model parameters by maximizing the expected complete-data log-likelihood
+    using the responsibilities computed in the E-step. Each emission distribution and
+    the transition parameters are updated independently.
+    
+    Args:
+        params: Current GLMHMM parameters.
+        data: Dataset containing all observation sequences and covariates.
+        gammas: State responsibilities from E-step, list of arrays with shape (T_i, K).
+        xis: Transition responsibilities from E-step, list of arrays with shape (T_i-1, K, K).
+        config: Configuration containing regularization parameters and other settings.
+    
+    Returns:
+        Updated GLMHMM parameters with optimized emission weights, dispersion parameters,
+        and transition parameters (theta or log_A depending on model type).
+    """
+    gamma_concat = jnp.concatenate(gammas, axis=0)
+    
+    new_W_bern = params.W_bern
+    if params.W_bern is not None:
+        X_all = jnp.concatenate(data.x_bern, axis=0)
+        Y_all = jnp.concatenate(data.y_bern, axis=0)
+        new_W_bern, _ = bern_m_step_optax(
+            X_all, Y_all, gamma_concat, params.W_bern, config.l2_reg_bern
+        )
+
+    new_W_multinom = params.W_multinom
+    if params.W_multinom is not None:
+        X_all = jnp.concatenate(data.x_multinom, axis=0)
+        Y_all = jnp.concatenate(data.y_multinom, axis=0)
+        new_W_multinom, _ = multinomial_obs_m_step_optax(
+            X_all, Y_all, gamma_concat, params.W_multinom, config.l2_reg_multinom
+        )
+
+    new_W_nb, new_phi_nb = params.W_negbin, params.phi_negbin
+    if params.W_negbin is not None:
+        X_all = jnp.concatenate(data.x_negbin, axis=0)
+        Y_all = jnp.concatenate(data.y_negbin, axis=0)
+        new_W_nb, new_phi_nb, _ = negbin_m_step_optax(
+            X_all, Y_all, gamma_concat, params.W_negbin, params.phi_negbin, config.l2_reg_negbin
+        )
+
+    new_W_gamma, new_alpha_gamma = params.W_gamma, params.alpha_gamma
+    if params.W_gamma is not None:
+            X_all = jnp.concatenate(data.x_gamma, axis=0)
+            Y_all = jnp.concatenate(data.y_gamma, axis=0)
+            new_W_gamma, new_alpha_gamma, _ = gamma_m_step_optax(
+                X_all, Y_all, gamma_concat, params.W_gamma, params.alpha_gamma, config.l2_reg_gamma
+            )
+
+    new_W_gauss, new_Sigma_gauss = params.W_gauss, params.Sigma_gauss
+    if params.W_gauss is not None:
+         if isinstance(data.x_gauss[0], list):
+             x_gs_list = [jnp.concatenate(seq, axis=0) for seq in data.x_gauss]
+             y_gs_list = [jnp.concatenate(seq, axis=0) for seq in data.y_gauss]
+         else:
+             x_gs_list = data.x_gauss
+             y_gs_list = data.y_gauss
+
+         expanded_gammas = []
+         for i, g in enumerate(gammas):
+             if data.gauss_first_idx is not None:
+                 first = data.gauss_first_idx[i]
+                 last = data.gauss_last_idx[i]
+                 repeats = last - first
+                 total_len = x_gs_list[i].shape[0]
+                 g_exp = jnp.repeat(g, repeats, axis=0, total_repeat_length=total_len)
+                 expanded_gammas.append(g_exp)
+             else:
+                 expanded_gammas.append(g)
+             
+         D_g = x_gs_list[0].shape[1]
+         M_g = y_gs_list[0].shape[1]
+         K = params.log_pi0.shape[0]
+         
+         new_W_gauss, new_Sigma_gauss = batch_m_step_updates(
+             x_gs_list, y_gs_list, expanded_gammas, 
+             config.l2_reg_gauss, D_g, M_g, K
+         )
+
+    new_theta, new_log_A = params.theta, params.log_A
+    if params.theta is not None:
+        X_trans_all = jnp.concatenate(data.x_trans, axis=0)
+        xi_all = jnp.concatenate(xis, axis=0)
+        new_theta, _ = transitions_m_step_optax_reduced(
+             X_trans_all, xi_all, params.theta, jnp.ones(config.num_states), config.l2_reg_trans
+        )
+    else:
+        xi_sum = jnp.sum(jnp.concatenate(xis, axis=0), axis=0)
+        new_A = xi_sum / jnp.sum(xi_sum, axis=1, keepdims=True)
+        new_log_A = jnp.log(new_A + 1e-9)
+
+    return GLMHMMParams(
+        log_pi0=params.log_pi0, 
+        log_A=new_log_A,
+        theta=new_theta,
+        W_bern=new_W_bern,
+        W_multinom=new_W_multinom,
+        W_negbin=new_W_nb,
+        phi_negbin=new_phi_nb,
+        W_gamma=new_W_gamma,
+        alpha_gamma=new_alpha_gamma,
+        W_gauss=new_W_gauss,
+        Sigma_gauss=new_Sigma_gauss
+    )
+
+def fit_glmhmm(data: GLMHMMData, config: GLMHMMConfig, initial_params: Optional[GLMHMMParams] = None):
+    """
+    Fits a Generalized Linear Model Hidden Markov Model using the EM algorithm.
+    
+    This is the main entry point for training a GLMHMM. It alternates between:
+    - E-step: Computing state/transition responsibilities using forward-backward
+    - M-step: Updating parameters to maximize expected complete-data likelihood
+    
+    The algorithm continues until convergence (change in log-likelihood < tolerance)
+    or the maximum number of iterations is reached.
+    
+    Args:
+        data: GLMHMMData object containing:
+            - Observation sequences for each emission type
+            - Covariate sequences for emissions and transitions
+            All sequences should have the same length within each list.
+        config: GLMHMMConfig containing:
+            - num_states: Number of hidden states (K)
+            - num_em_iters: Maximum EM iterations
+            - tol: Convergence tolerance for log-likelihood
+            - l2_reg_*: Regularization parameters for each distribution
+        initial_params: Optional GLMHMMParams object to initialize the model. 
+                        If None, parameters are initialized randomly.
+    
+    Returns:
+        params: Fitted GLMHMM parameters including:
+            - log_pi0: Initial state log-probabilities
+            - log_A or theta: Transition parameters
+            - W_*: Emission weights for each active distribution
+            - phi_negbin, alpha_gamma: Dispersion parameters if applicable
+        lml_history: List of log marginal likelihoods at each EM iteration.
+                     Can be used to diagnose convergence.
+    
+    Example:
+        >>> data = GLMHMMData(x_bern=[X1, X2], y_bern=[y1, y2], ...)
+        >>> config = GLMHMMConfig(num_states=3, num_em_iters=100, l2_reg_bern=1.0)
+        >>> params, lml_history = fit_glmhmm(data, config)
+    """
+    if initial_params is None:
+        params = initialize_params(data, config)
+    else:
+        params = initial_params
+    lml_history = []
+    
+    print("Starting EM...")
+    for epoch in tqdm(range(config.num_em_iters)):
+
+        gammas, xis, lml = e_step(params, data)
+        
+        if epoch > 0 and abs(lml - lml_history[-1]) < config.tol:
+            print(f"Converged at epoch {epoch}")
+            break
+        lml_history.append(lml)
+        
+        params = m_step(params, data, gammas, xis, config)
+        
+    return params, lml_history

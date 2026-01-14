@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "glmhmm"
+version = "0.1.0"
+description = "A JAX-based implementation of GLM-HMMs for neuroscience data"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+  {name = "Yoel Sanchez Araujo", email = "yoelsanchez06@gmail.com"},
+]
+dependencies = [
+    "jax>=0.4.0",
+    "jaxlib>=0.4.0",
+    "optax>=0.1.0",
+    "tqdm",
+    "numpy",
+    "scipy"
+]
+
+[project.urls]
+Homepage = "https://github.com/ysanchezaraujo/glmhmm"
+Repository = "https://github.com/ysanchezaraujo/glmhmm"
+
+[tool.setuptools.packages.find]
+where = ["src"]

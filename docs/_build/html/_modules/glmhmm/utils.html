@@ -1,0 +1,915 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html">
+
+    <!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
+        <title>glmhmm.utils - glmhmm 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../index.html"><div class="brand">glmhmm 0.1.0 documentation</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../index.html">
+  
+  <span class="sidebar-brand-text">glmhmm 0.1.0 documentation</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Reference</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <h1>Source code for glmhmm.utils</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">namedtuple</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">jax</span><span class="w"> </span><span class="kn">import</span> <span class="n">jit</span><span class="p">,</span> <span class="n">nn</span><span class="p">,</span> <span class="n">random</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
+
+<div class="viewcode-block" id="save_pickle">
+<a class="viewcode-back" href="../../api.html#glmhmm.utils.save_pickle">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">save_pickle</span><span class="p">(</span><span class="n">save_name</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">save_name</span><span class="p">,</span> <span class="s2">&quot;wb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+        <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">file</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="read_pickle">
+<a class="viewcode-back" href="../../api.html#glmhmm.utils.read_pickle">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">read_pickle</span><span class="p">(</span><span class="n">read_name</span><span class="p">):</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">read_name</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">file</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="compute_boundaries">
+<a class="viewcode-back" href="../../api.html#glmhmm.utils.compute_boundaries">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_boundaries</span><span class="p">(</span><span class="n">list_of_array</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Computes trial/segment info using jax.numpy.&quot;&quot;&quot;</span>
+    <span class="n">n_trials</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">list_of_array</span><span class="p">)</span>
+    <span class="n">samples_per_trial</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">list_of_array</span><span class="p">])</span>
+    <span class="n">last_idx</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">samples_per_trial</span><span class="p">)</span>
+    <span class="n">first_idx</span> <span class="o">=</span> <span class="n">last_idx</span> <span class="o">-</span> <span class="n">samples_per_trial</span>
+
+    <span class="n">ind_info</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span>
+        <span class="s1">&#39;info&#39;</span><span class="p">,</span> 
+        <span class="p">[</span><span class="s1">&#39;n_trials&#39;</span><span class="p">,</span> <span class="s1">&#39;samples_per_trial&#39;</span><span class="p">,</span> <span class="s1">&#39;last_idx&#39;</span><span class="p">,</span> <span class="s1">&#39;first_idx&#39;</span><span class="p">]</span>
+        <span class="p">)(</span><span class="n">n_trials</span><span class="o">=</span><span class="n">n_trials</span><span class="p">,</span> <span class="n">samples_per_trial</span><span class="o">=</span><span class="n">samples_per_trial</span><span class="p">,</span> <span class="n">last_idx</span><span class="o">=</span><span class="n">last_idx</span><span class="p">,</span> <span class="n">first_idx</span><span class="o">=</span><span class="n">first_idx</span><span class="p">)</span>
+    
+    <span class="k">return</span> <span class="n">ind_info</span></div>
+
+
+<span class="nd">@jit</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">transform_theta</span><span class="p">(</span><span class="n">theta</span><span class="p">,</span> <span class="n">ref_state_ind</span><span class="p">):</span>
+    <span class="n">ref_col</span> <span class="o">=</span> <span class="n">theta</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">ref_state_ind</span><span class="p">]</span>
+    <span class="n">ref_col_expanded</span> <span class="o">=</span> <span class="n">ref_col</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> 
+    <span class="n">theta_prime</span> <span class="o">=</span> <span class="n">theta</span> <span class="o">-</span> <span class="n">ref_col_expanded</span>
+    <span class="k">return</span> <span class="n">theta_prime</span>
+
+<div class="viewcode-block" id="compute_A_from_theta_and_inputs">
+<a class="viewcode-back" href="../../api.html#glmhmm.utils.compute_A_from_theta_and_inputs">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_A_from_theta_and_inputs</span><span class="p">(</span><span class="n">x_trans</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">theta</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Computes the time-varying transition matrix A_t.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">logits</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s1">&#39;tk,kij-&gt;tij&#39;</span><span class="p">,</span> <span class="n">x_trans</span><span class="p">,</span> <span class="n">theta</span><span class="p">)</span>
+    <span class="n">A</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="n">logits</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">A</span></div>
+
+
+<span class="c1"># --- 1. MODIFIED: Generates Inputs with Bias Column (Col 0 = 1.0) ---</span>
+<div class="viewcode-block" id="generate_input_driven_inputs">
+<a class="viewcode-back" href="../../api.html#glmhmm.utils.generate_input_driven_inputs">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">generate_input_driven_inputs</span><span class="p">(</span>
+    <span class="n">key</span><span class="p">,</span>
+    <span class="n">n_steps</span><span class="p">,</span>
+    <span class="n">n_trans_features</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="n">keys</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">n_steps</span><span class="p">)</span>
+    <span class="n">x_trans_set</span> <span class="o">=</span> <span class="p">[]</span>
+    
+    <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_steps</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="c1"># Generate random noise for features 1 to K</span>
+        <span class="n">x_noise</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">keys</span><span class="p">[</span><span class="n">t</span><span class="p">],</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_trans_features</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
+        
+        <span class="c1"># Force Column 0 to be 1.0 (Bias/Intercept)</span>
+        <span class="n">x_bias</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        
+        <span class="c1"># Concatenate: [1.0, noise...]</span>
+        <span class="n">x_trans</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">x_bias</span><span class="p">,</span> <span class="n">x_noise</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">x_trans_set</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">x_trans</span><span class="p">)</span>
+        
+    <span class="k">return</span> <span class="n">x_trans_set</span></div>
+
+
+
+<div class="viewcode-block" id="generate_latent_state_sequence">
+<a class="viewcode-back" href="../../api.html#glmhmm.utils.generate_latent_state_sequence">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">generate_latent_state_sequence</span><span class="p">(</span>
+    <span class="n">key</span><span class="p">,</span> 
+    <span class="n">n_steps</span><span class="p">,</span>
+    <span class="n">pi0</span><span class="p">,</span>
+    <span class="n">A</span>
+<span class="p">):</span>
+    <span class="n">keys</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">n_steps</span><span class="p">)</span>
+    <span class="n">n_states</span> <span class="o">=</span> <span class="n">pi0</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">n_states</span><span class="p">:</span>
+        <span class="n">transition_type</span> <span class="o">=</span> <span class="s2">&quot;static&quot;</span>
+    <span class="k">elif</span> <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">n_steps</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">transition_type</span> <span class="o">=</span> <span class="s2">&quot;input_driven&quot;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid transition matrix shape.&quot;</span><span class="p">)</span>
+    
+    <span class="n">state_sequence</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_steps</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+    <span class="n">initial_state</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">keys</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">n_states</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">pi0</span><span class="p">)</span>
+    <span class="n">state_sequence</span> <span class="o">=</span> <span class="n">state_sequence</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">initial_state</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_steps</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="n">latent_t</span> <span class="o">=</span> <span class="n">state_sequence</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">transition_type</span> <span class="o">==</span> <span class="s2">&quot;static&quot;</span><span class="p">:</span>
+            <span class="n">transition_probs</span> <span class="o">=</span> <span class="n">A</span><span class="p">[</span><span class="n">latent_t</span><span class="p">,</span> <span class="p">:]</span>
+        <span class="k">elif</span> <span class="n">transition_type</span> <span class="o">==</span> <span class="s2">&quot;input_driven&quot;</span><span class="p">:</span>
+            <span class="n">transition_probs</span> <span class="o">=</span> <span class="n">A</span><span class="p">[</span><span class="n">t</span><span class="p">,</span> <span class="n">latent_t</span><span class="p">,</span> <span class="p">:]</span>
+   
+        <span class="n">next_state</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">keys</span><span class="p">[</span><span class="n">t</span> <span class="o">+</span> <span class="mi">1</span><span class="p">],</span> <span class="n">n_states</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">transition_probs</span><span class="p">)</span>
+        <span class="n">state_sequence</span> <span class="o">=</span> <span class="n">state_sequence</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">t</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">next_state</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">state_sequence</span></div>
+
+
+<span class="c1"># --- 2. MODIFIED: Helper function that simulates Bernoulli data with Bias ---</span>
+<div class="viewcode-block" id="simulate_data_bernoulli_glmhmm">
+<a class="viewcode-back" href="../../api.html#glmhmm.utils.simulate_data_bernoulli_glmhmm">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">simulate_data_bernoulli_glmhmm</span><span class="p">(</span>
+    <span class="n">key</span><span class="p">,</span>
+    <span class="n">n_states</span><span class="p">,</span>
+    <span class="n">n_hmm_steps</span><span class="p">,</span>
+    <span class="n">n_bern_features</span><span class="p">,</span>
+    <span class="n">n_trans_features</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="n">key</span><span class="p">,</span> <span class="n">subkey_seq</span><span class="p">,</span> <span class="n">subkey_trans</span><span class="p">,</span> <span class="n">subkey_bern</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+    <span class="n">pi0</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">])</span>
+    
+    <span class="c1"># 1. Generate Inputs (Correctly includes Bias)</span>
+    <span class="n">x_inputs</span> <span class="o">=</span> <span class="n">generate_input_driven_inputs</span><span class="p">(</span><span class="n">subkey_trans</span><span class="p">,</span> <span class="n">n_hmm_steps</span><span class="p">,</span> <span class="n">n_trans_features</span><span class="p">)</span>
+    <span class="n">x_inputs_concat</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">x_inputs</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    
+    <span class="c1"># 2. Generate Transitions</span>
+    <span class="n">key</span><span class="p">,</span> <span class="n">subkey_trans</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+    <span class="n">theta</span> <span class="o">=</span> <span class="mf">0.1</span> <span class="o">*</span> <span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">subkey_trans</span><span class="p">,</span> <span class="p">(</span><span class="n">n_trans_features</span><span class="p">,</span> <span class="n">n_states</span><span class="p">,</span> <span class="n">n_states</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_states</span><span class="p">):</span>
+        <span class="n">theta</span> <span class="o">=</span> <span class="n">theta</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="mf">5.0</span><span class="p">)</span> <span class="c1"># Sticky Bias on Feature 0</span>
+
+    <span class="n">A</span> <span class="o">=</span> <span class="n">compute_A_from_theta_and_inputs</span><span class="p">(</span><span class="n">x_inputs_concat</span><span class="p">,</span> <span class="n">theta</span><span class="p">)</span>
+    <span class="n">state_sequence</span> <span class="o">=</span> <span class="n">generate_latent_state_sequence</span><span class="p">(</span><span class="n">subkey_seq</span><span class="p">,</span> <span class="n">n_hmm_steps</span><span class="p">,</span> <span class="n">pi0</span><span class="p">,</span> <span class="n">A</span><span class="p">)</span>
+
+    <span class="c1"># 3. DEFINE EMISSIONS (THE FIX)</span>
+    <span class="c1"># We want 2 features: [Bias, Stimulus]</span>
+    <span class="c1"># State 0: Lazy (Bias -2, ignore stimulus)</span>
+    <span class="c1"># State 1: Worker (Bias 0, Stimulus +3)</span>
+    <span class="c1"># State 2: Rebel (Bias 0, Stimulus -3)</span>
+    
+    <span class="n">W_bern</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_bern_features</span><span class="p">,</span> <span class="n">n_states</span><span class="p">))</span>
+    
+    <span class="c1"># State 0: Negative Bias (Index 0)</span>
+    <span class="n">W_bern</span> <span class="o">=</span> <span class="n">W_bern</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="o">-</span><span class="mf">2.0</span><span class="p">)</span>
+    
+    <span class="c1"># State 1: Positive Stimulus (Index 1)</span>
+    <span class="n">W_bern</span> <span class="o">=</span> <span class="n">W_bern</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="mf">3.0</span><span class="p">)</span>
+    
+    <span class="c1"># State 2: Negative Stimulus (Index 1) &lt;--- FIXED: Use Index 1, not 2</span>
+    <span class="n">W_bern</span> <span class="o">=</span> <span class="n">W_bern</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="o">-</span><span class="mf">3.0</span><span class="p">)</span> 
+
+    <span class="c1"># 4. Generate Choices</span>
+    <span class="n">choices</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_hmm_steps</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+    <span class="n">subkeys_bern</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">n_hmm_steps</span><span class="p">)</span>
+    <span class="n">x_bern</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_hmm_steps</span><span class="p">,</span> <span class="n">n_bern_features</span><span class="p">))</span>
+
+    <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_hmm_steps</span><span class="p">):</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">state_sequence</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
+        
+        <span class="c1"># Generate x_t: [1.0, random_stimulus]</span>
+        <span class="n">x_noise</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">subkeys_bern</span><span class="p">[</span><span class="n">t</span><span class="p">],</span> <span class="p">(</span><span class="n">n_bern_features</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,))</span>
+        <span class="n">x_t</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">jnp</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">]),</span> <span class="n">x_noise</span><span class="p">])</span> 
+        
+        <span class="n">logit</span> <span class="o">=</span> <span class="n">x_t</span> <span class="o">@</span> <span class="n">W_bern</span><span class="p">[:,</span> <span class="n">state</span><span class="p">]</span>
+        <span class="n">prob_y_eq_1</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">sigmoid</span><span class="p">(</span><span class="n">logit</span><span class="p">)</span>
+        <span class="n">key</span><span class="p">,</span> <span class="n">subkey_bern</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="n">choices</span> <span class="o">=</span> <span class="n">choices</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">t</span><span class="p">]</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">random</span><span class="o">.</span><span class="n">bernoulli</span><span class="p">(</span><span class="n">subkey_bern</span><span class="p">,</span> <span class="n">prob_y_eq_1</span><span class="p">))</span>
+        <span class="n">x_bern</span> <span class="o">=</span> <span class="n">x_bern</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">t</span><span class="p">]</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">x_t</span><span class="p">)</span>
+
+    <span class="n">params</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span><span class="s1">&#39;params&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;pi0&#39;</span><span class="p">,</span> <span class="s1">&#39;A&#39;</span><span class="p">,</span> <span class="s1">&#39;theta&#39;</span><span class="p">,</span> <span class="s1">&#39;W_bern&#39;</span><span class="p">])(</span>
+        <span class="n">pi0</span><span class="o">=</span><span class="n">pi0</span><span class="p">,</span> <span class="n">A</span><span class="o">=</span><span class="n">A</span><span class="p">,</span> <span class="n">theta</span><span class="o">=</span><span class="n">theta</span><span class="p">,</span> <span class="n">W_bern</span><span class="o">=</span><span class="n">W_bern</span>
+    <span class="p">)</span>
+
+    <span class="n">data</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span><span class="s1">&#39;data&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;state_sequence&#39;</span><span class="p">,</span> <span class="s1">&#39;x_bern&#39;</span><span class="p">,</span> <span class="s1">&#39;y_bern&#39;</span><span class="p">,</span> <span class="s1">&#39;x_inputs&#39;</span><span class="p">])(</span>
+        <span class="n">state_sequence</span><span class="o">=</span><span class="n">state_sequence</span><span class="p">,</span>
+        <span class="n">x_bern</span><span class="o">=</span><span class="n">x_bern</span><span class="p">,</span>
+        <span class="n">y_bern</span><span class="o">=</span><span class="n">choices</span><span class="p">,</span>
+        <span class="n">x_inputs</span><span class="o">=</span><span class="n">x_inputs</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">params</span><span class="p">,</span> <span class="n">data</span></div>
+
+
+
+<span class="c1"># --- 3. MODIFIED: Main Simulation Function with Bias Logic ---</span>
+<div class="viewcode-block" id="simulate_hmm_states_input_driven">
+<a class="viewcode-back" href="../../api.html#glmhmm.utils.simulate_hmm_states_input_driven">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">simulate_hmm_states_input_driven</span><span class="p">(</span>
+    <span class="n">key</span><span class="p">:</span> <span class="n">random</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">,</span>
+    <span class="n">pi0</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">A_t</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">n_hmm_steps</span><span class="p">:</span> <span class="nb">int</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+    <span class="n">n_states</span> <span class="o">=</span> <span class="n">pi0</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    
+    <span class="n">key</span><span class="p">,</span> <span class="n">subkey_init</span><span class="p">,</span> <span class="n">subkey_trans</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+    <span class="n">state_sequence</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_hmm_steps</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+    
+    <span class="n">current_state</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">subkey_init</span><span class="p">,</span> <span class="n">n_states</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">pi0</span><span class="p">)</span>
+    <span class="n">state_sequence</span> <span class="o">=</span> <span class="n">state_sequence</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">current_state</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_hmm_steps</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="n">transition_probs</span> <span class="o">=</span> <span class="n">A_t</span><span class="p">[</span><span class="n">t</span><span class="p">,</span> <span class="n">current_state</span><span class="p">,</span> <span class="p">:]</span>
+        <span class="n">key</span><span class="p">,</span> <span class="n">subkey_trans</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="n">current_state</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">subkey_trans</span><span class="p">,</span> <span class="n">n_states</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">transition_probs</span><span class="p">)</span>
+        <span class="n">state_sequence</span> <span class="o">=</span> <span class="n">state_sequence</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">t</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">current_state</span><span class="p">)</span>
+        
+    <span class="k">return</span> <span class="n">state_sequence</span></div>
+
+
+
+<div class="viewcode-block" id="simulate_data_for_glmhmm">
+<a class="viewcode-back" href="../../api.html#glmhmm.utils.simulate_data_for_glmhmm">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">simulate_data_for_glmhmm</span><span class="p">(</span>
+    <span class="n">key</span><span class="p">:</span> <span class="n">random</span><span class="o">.</span><span class="n">PRNGKey</span><span class="p">,</span>
+    <span class="n">true_params</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+    <span class="n">n_sequences</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">n_hmm_steps</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="c1"># Optional params for Gaussian data</span>
+    <span class="n">n_gauss_features</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">n_regions</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">samples_per_gaussian_segment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="c1"># Optional params for Bernoulli data</span>
+    <span class="n">n_bern_features</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="c1"># Optional params for transition data</span>
+    <span class="c1"># Optional params for transition data</span>
+    <span class="n">n_trans_features</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="c1"># Optional params for new emissions</span>
+    <span class="n">n_multinom_features</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">n_multinom_choices</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">n_negbin_features</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">n_gamma_features</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Simulates data for the general fit_glmhmm function.</span>
+<span class="sd">    Can simulate for Bernoulli-only, Gaussian-only, or joint models,</span>
+<span class="sd">    with static or input-driven transitions.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">true_pi0</span> <span class="o">=</span> <span class="n">true_params</span><span class="p">[</span><span class="s2">&quot;pi0&quot;</span><span class="p">]</span>
+    <span class="n">true_A</span> <span class="o">=</span> <span class="n">true_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;A&quot;</span><span class="p">)</span>
+    <span class="n">true_theta</span> <span class="o">=</span> <span class="n">true_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;theta&quot;</span><span class="p">)</span>
+    <span class="n">true_W_bern</span> <span class="o">=</span> <span class="n">true_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;W_bern&quot;</span><span class="p">)</span>
+    <span class="n">true_W_gauss</span> <span class="o">=</span> <span class="n">true_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;W_gauss&quot;</span><span class="p">)</span>
+    <span class="n">true_W_gauss</span> <span class="o">=</span> <span class="n">true_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;W_gauss&quot;</span><span class="p">)</span>
+    <span class="n">true_Sigma_gauss</span> <span class="o">=</span> <span class="n">true_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;Sigma_gauss&quot;</span><span class="p">)</span>
+    <span class="n">true_W_multinom</span> <span class="o">=</span> <span class="n">true_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;W_multinom&quot;</span><span class="p">)</span>
+    <span class="n">true_W_negbin</span> <span class="o">=</span> <span class="n">true_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;W_negbin&quot;</span><span class="p">)</span>
+    <span class="n">true_phi_negbin</span> <span class="o">=</span> <span class="n">true_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;phi_negbin&quot;</span><span class="p">)</span>
+    <span class="n">true_W_gamma</span> <span class="o">=</span> <span class="n">true_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;W_gamma&quot;</span><span class="p">)</span>
+    <span class="n">true_alpha_gamma</span> <span class="o">=</span> <span class="n">true_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;alpha_gamma&quot;</span><span class="p">)</span>
+
+    <span class="n">has_bern</span> <span class="o">=</span> <span class="n">true_W_bern</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="n">has_gauss</span> <span class="o">=</span> <span class="n">true_W_gauss</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">true_Sigma_gauss</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="n">has_multinom</span> <span class="o">=</span> <span class="n">true_W_multinom</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="n">has_negbin</span> <span class="o">=</span> <span class="n">true_W_negbin</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">true_phi_negbin</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="n">has_gamma</span> <span class="o">=</span> <span class="n">true_W_gamma</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">true_alpha_gamma</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="n">is_input_driven</span> <span class="o">=</span> <span class="n">true_theta</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+    <span class="n">all_state_sequences</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">all_x_trans_set</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_sequences</span><span class="p">):</span>
+        <span class="n">key</span><span class="p">,</span> <span class="n">subkey_seq</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">is_input_driven</span><span class="p">:</span>
+            <span class="c1"># THIS NOW USES THE FIXED GENERATOR (Includes Bias Column)</span>
+            <span class="n">x_trans</span> <span class="o">=</span> <span class="n">generate_input_driven_inputs</span><span class="p">(</span><span class="n">subkey_seq</span><span class="p">,</span> <span class="n">n_hmm_steps</span><span class="p">,</span> <span class="n">n_trans_features</span><span class="p">)</span>
+            
+            <span class="c1"># Since generate_input_driven_inputs returns a list of (1, F) arrays, </span>
+            <span class="c1"># we concat them to get (T-1, F) for computation</span>
+            <span class="n">x_trans_concat</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">x_trans</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">all_x_trans_set</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">x_trans_concat</span><span class="p">)</span>
+            
+            <span class="n">A_t</span> <span class="o">=</span> <span class="n">compute_A_from_theta_and_inputs</span><span class="p">(</span><span class="n">x_trans_concat</span><span class="p">,</span> <span class="n">true_theta</span><span class="p">)</span>
+            <span class="n">states</span> <span class="o">=</span> <span class="n">simulate_hmm_states_input_driven</span><span class="p">(</span><span class="n">subkey_seq</span><span class="p">,</span> <span class="n">true_pi0</span><span class="p">,</span> <span class="n">A_t</span><span class="p">,</span> <span class="n">n_hmm_steps</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">states</span> <span class="o">=</span> <span class="n">simulate_hmm_states_input_driven</span><span class="p">(</span><span class="n">subkey_seq</span><span class="p">,</span> <span class="n">true_pi0</span><span class="p">,</span> <span class="n">jnp</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">true_A</span><span class="p">,</span> <span class="p">(</span><span class="n">n_hmm_steps</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span> <span class="n">n_hmm_steps</span><span class="p">)</span>
+        
+        <span class="n">all_state_sequences</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">states</span><span class="p">)</span>
+
+    <span class="n">all_x_bern_set</span><span class="p">,</span> <span class="n">all_y_bern_set</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+    <span class="n">all_x_bern_set</span><span class="p">,</span> <span class="n">all_y_bern_set</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+    <span class="n">all_x_multinom_set</span><span class="p">,</span> <span class="n">all_y_multinom_set</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+    <span class="n">all_x_negbin_set</span><span class="p">,</span> <span class="n">all_y_negbin_set</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+    <span class="n">all_x_gamma_set</span><span class="p">,</span> <span class="n">all_y_gamma_set</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+    <span class="n">all_x_gauss_nested_set</span><span class="p">,</span> <span class="n">all_y_gauss_nested_set</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_sequences</span><span class="p">):</span>
+        <span class="n">key</span><span class="p">,</span> <span class="n">subkey_seq_obs</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="n">states_for_seq</span> <span class="o">=</span> <span class="n">all_state_sequences</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+        
+        <span class="c1"># --- Bernoulli Observations ---</span>
+        <span class="k">if</span> <span class="n">has_bern</span><span class="p">:</span>
+            <span class="c1"># MODIFIED: Generate with Bias Column explicitly</span>
+            <span class="c1"># 1. Generate Noise for columns 1 to F</span>
+            <span class="n">x_noise</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">subkey_seq_obs</span><span class="p">,</span> <span class="p">(</span><span class="n">n_hmm_steps</span><span class="p">,</span> <span class="n">n_bern_features</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
+            <span class="c1"># 2. Generate Ones for column 0</span>
+            <span class="n">x_bias</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="n">n_hmm_steps</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+            <span class="c1"># 3. Concatenate: [1.0, noise...]</span>
+            <span class="n">x_bern_seq</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">x_bias</span><span class="p">,</span> <span class="n">x_noise</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            
+            <span class="n">y_bern_seq</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_hmm_steps</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_hmm_steps</span><span class="p">):</span>
+                <span class="n">key</span><span class="p">,</span> <span class="n">subkey_obs</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+                <span class="n">state</span> <span class="o">=</span> <span class="n">states_for_seq</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
+                <span class="n">logit</span> <span class="o">=</span> <span class="n">x_bern_seq</span><span class="p">[</span><span class="n">t</span><span class="p">,</span> <span class="p">:]</span> <span class="o">@</span> <span class="n">true_W_bern</span><span class="p">[:,</span> <span class="n">state</span><span class="p">]</span>
+                <span class="n">prob_y_eq_1</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">sigmoid</span><span class="p">(</span><span class="n">logit</span><span class="p">)</span>
+                <span class="n">y_bern_seq</span> <span class="o">=</span> <span class="n">y_bern_seq</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">t</span><span class="p">]</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">random</span><span class="o">.</span><span class="n">bernoulli</span><span class="p">(</span><span class="n">subkey_obs</span><span class="p">,</span> <span class="n">prob_y_eq_1</span><span class="p">))</span>
+            <span class="n">all_x_bern_set</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">x_bern_seq</span><span class="p">)</span>
+            <span class="n">all_y_bern_set</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">y_bern_seq</span><span class="p">)</span>
+
+        <span class="c1"># --- Gaussian Observations ---</span>
+        <span class="k">if</span> <span class="n">has_gauss</span><span class="p">:</span>
+            <span class="n">x_gauss_nested_trials</span><span class="p">,</span> <span class="n">y_gauss_nested_trials</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">samples_per_gaussian_segment</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+                <span class="n">current_samples_per_segment</span> <span class="o">=</span> <span class="p">[</span><span class="n">samples_per_gaussian_segment</span><span class="p">]</span> <span class="o">*</span> <span class="n">n_hmm_steps</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">current_samples_per_segment</span> <span class="o">=</span> <span class="n">samples_per_gaussian_segment</span>
+
+            <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_hmm_steps</span><span class="p">):</span>
+                <span class="n">key</span><span class="p">,</span> <span class="n">subkey_x</span><span class="p">,</span> <span class="n">subkey_y</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+                <span class="n">state</span> <span class="o">=</span> <span class="n">states_for_seq</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
+                <span class="n">n_samples_this_segment</span> <span class="o">=</span> <span class="n">current_samples_per_segment</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
+                
+                <span class="c1"># Note: We assume Gaussian inputs don&#39;t strictly need a bias column enforced here</span>
+                <span class="c1"># unless specified, but usually we just want random inputs for recovery tests.</span>
+                <span class="n">x_gauss_trial</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">subkey_x</span><span class="p">,</span> <span class="p">(</span><span class="n">n_samples_this_segment</span><span class="p">,</span> <span class="n">n_gauss_features</span><span class="p">))</span>
+                <span class="n">mu_gauss_trial</span> <span class="o">=</span> <span class="n">x_gauss_trial</span> <span class="o">@</span> <span class="n">true_W_gauss</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">state</span><span class="p">]</span>
+                <span class="n">y_gauss_trial</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">multivariate_normal</span><span class="p">(</span><span class="n">subkey_y</span><span class="p">,</span> <span class="n">mean</span><span class="o">=</span><span class="n">mu_gauss_trial</span><span class="p">,</span> <span class="n">cov</span><span class="o">=</span><span class="n">true_Sigma_gauss</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">state</span><span class="p">])</span>
+                
+                <span class="n">x_gauss_nested_trials</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">x_gauss_trial</span><span class="p">)</span>
+                <span class="n">y_gauss_nested_trials</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">y_gauss_trial</span><span class="p">)</span>
+
+            <span class="n">all_x_gauss_nested_set</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">x_gauss_nested_trials</span><span class="p">)</span>
+            <span class="n">all_y_gauss_nested_set</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">y_gauss_nested_trials</span><span class="p">)</span>
+
+        <span class="c1"># --- Multinomial Observations ---</span>
+        <span class="k">if</span> <span class="n">has_multinom</span><span class="p">:</span>
+             <span class="c1"># Generate inputs with bias</span>
+            <span class="n">key</span><span class="p">,</span> <span class="n">subkey_mn</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="n">x_noise</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">subkey_mn</span><span class="p">,</span> <span class="p">(</span><span class="n">n_hmm_steps</span><span class="p">,</span> <span class="n">n_multinom_features</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
+            <span class="n">x_bias</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="n">n_hmm_steps</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+            <span class="n">x_mn_seq</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">x_bias</span><span class="p">,</span> <span class="n">x_noise</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="c1"># (T, D)</span>
+
+            <span class="n">y_mn_seq</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_hmm_steps</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_hmm_steps</span><span class="p">):</span>
+                <span class="n">key</span><span class="p">,</span> <span class="n">subkey_obs</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+                <span class="n">state</span> <span class="o">=</span> <span class="n">states_for_seq</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
+                <span class="c1"># Logits: X[t] @ W[:, :, state] -&gt; (C,)</span>
+                <span class="n">logits</span> <span class="o">=</span> <span class="n">x_mn_seq</span><span class="p">[</span><span class="n">t</span><span class="p">]</span> <span class="o">@</span> <span class="n">true_W_multinom</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">state</span><span class="p">]</span>
+                <span class="n">probs</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="n">logits</span><span class="p">)</span>
+                <span class="n">y_mn_seq</span> <span class="o">=</span> <span class="n">y_mn_seq</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">t</span><span class="p">]</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">random</span><span class="o">.</span><span class="n">categorical</span><span class="p">(</span><span class="n">subkey_obs</span><span class="p">,</span> <span class="n">jnp</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">probs</span><span class="p">)))</span>
+            
+            <span class="n">all_x_multinom_set</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">x_mn_seq</span><span class="p">)</span>
+            <span class="n">all_y_multinom_set</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">y_mn_seq</span><span class="p">)</span>
+
+        <span class="c1"># --- Negative Binomial Observations ---</span>
+        <span class="k">if</span> <span class="n">has_negbin</span><span class="p">:</span>
+            <span class="n">key</span><span class="p">,</span> <span class="n">subkey_nb</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="n">x_noise</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">subkey_nb</span><span class="p">,</span> <span class="p">(</span><span class="n">n_hmm_steps</span><span class="p">,</span> <span class="n">n_negbin_features</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
+            <span class="n">x_bias</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="n">n_hmm_steps</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+            <span class="n">x_nb_seq</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">x_bias</span><span class="p">,</span> <span class="n">x_noise</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="c1"># (T, D)</span>
+
+            <span class="n">y_nb_seq</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_hmm_steps</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span> <span class="c1"># Counts but often float format for compat</span>
+            <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_hmm_steps</span><span class="p">):</span>
+                <span class="n">key</span><span class="p">,</span> <span class="n">subkey_obs</span><span class="p">,</span> <span class="n">subkey_pois</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+                <span class="n">state</span> <span class="o">=</span> <span class="n">states_for_seq</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
+                
+                <span class="c1"># Mean mu = exp(X[t] @ W[:, state])</span>
+                <span class="n">mu</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">x_nb_seq</span><span class="p">[</span><span class="n">t</span><span class="p">]</span> <span class="o">@</span> <span class="n">true_W_negbin</span><span class="p">[:,</span> <span class="n">state</span><span class="p">])</span>
+                <span class="n">phi</span> <span class="o">=</span> <span class="n">true_phi_negbin</span><span class="p">[</span><span class="n">state</span><span class="p">]</span>
+                
+                <span class="c1"># Sample Gamma(shape=phi, rate=phi/mu)</span>
+                <span class="c1"># jax.random.gamma(key, a) samples Gamma(a, 1)</span>
+                <span class="c1"># X ~ Gamma(a, 1) -&gt; X/b ~ Gamma(a, b)</span>
+                <span class="c1"># Here b = phi/mu, so divide by phi/mu -&gt; multiply by mu/phi</span>
+                <span class="n">gamma_sample</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">gamma</span><span class="p">(</span><span class="n">subkey_obs</span><span class="p">,</span> <span class="n">phi</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">mu</span> <span class="o">/</span> <span class="n">phi</span><span class="p">)</span>
+                
+                <span class="c1"># Sample Poisson(gamma_sample)</span>
+                <span class="n">y_nb_seq</span> <span class="o">=</span> <span class="n">y_nb_seq</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">t</span><span class="p">]</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">random</span><span class="o">.</span><span class="n">poisson</span><span class="p">(</span><span class="n">subkey_pois</span><span class="p">,</span> <span class="n">gamma_sample</span><span class="p">))</span>
+            
+            <span class="n">all_x_negbin_set</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">x_nb_seq</span><span class="p">)</span>
+            <span class="n">all_y_negbin_set</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">y_nb_seq</span><span class="p">)</span>
+
+        <span class="c1"># --- Gamma Observations ---</span>
+        <span class="k">if</span> <span class="n">has_gamma</span><span class="p">:</span>
+            <span class="n">key</span><span class="p">,</span> <span class="n">subkey_gm</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="n">x_noise</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">subkey_gm</span><span class="p">,</span> <span class="p">(</span><span class="n">n_hmm_steps</span><span class="p">,</span> <span class="n">n_gamma_features</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
+            <span class="n">x_bias</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="n">n_hmm_steps</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+            <span class="n">x_gm_seq</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">x_bias</span><span class="p">,</span> <span class="n">x_noise</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="c1"># (T, D)</span>
+
+            <span class="n">y_gm_seq</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_hmm_steps</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">jnp</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_hmm_steps</span><span class="p">):</span>
+                <span class="n">key</span><span class="p">,</span> <span class="n">subkey_obs</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+                <span class="n">state</span> <span class="o">=</span> <span class="n">states_for_seq</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
+                
+                <span class="c1"># Mean mu = exp(X[t] @ W[:, state])</span>
+                <span class="n">mu</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">x_gm_seq</span><span class="p">[</span><span class="n">t</span><span class="p">]</span> <span class="o">@</span> <span class="n">true_W_gamma</span><span class="p">[:,</span> <span class="n">state</span><span class="p">])</span>
+                <span class="n">alpha</span> <span class="o">=</span> <span class="n">true_alpha_gamma</span><span class="p">[</span><span class="n">state</span><span class="p">]</span>
+                
+                <span class="c1"># y ~ Gamma(alpha, beta) where beta = alpha/mu</span>
+                <span class="c1"># Sample standard Gamma(alpha) -&gt; multiply by 1/beta = mu/alpha</span>
+                <span class="n">gamma_sample</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">gamma</span><span class="p">(</span><span class="n">subkey_obs</span><span class="p">,</span> <span class="n">alpha</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">mu</span> <span class="o">/</span> <span class="n">alpha</span><span class="p">)</span>
+                <span class="n">y_gm_seq</span> <span class="o">=</span> <span class="n">y_gm_seq</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">t</span><span class="p">]</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">gamma_sample</span><span class="p">)</span>
+                
+            <span class="n">all_x_gamma_set</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">x_gm_seq</span><span class="p">)</span>
+            <span class="n">all_y_gamma_set</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">y_gm_seq</span><span class="p">)</span>
+
+    <span class="n">simulated_data</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;x_trans_set&quot;</span><span class="p">:</span> <span class="n">all_x_trans_set</span> <span class="k">if</span> <span class="n">is_input_driven</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">&quot;x_set_bern&quot;</span><span class="p">:</span> <span class="n">all_x_bern_set</span> <span class="k">if</span> <span class="n">has_bern</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">&quot;y_set_bern&quot;</span><span class="p">:</span> <span class="n">all_y_bern_set</span> <span class="k">if</span> <span class="n">has_bern</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">&quot;x_multinom&quot;</span><span class="p">:</span> <span class="n">all_x_multinom_set</span> <span class="k">if</span> <span class="n">has_multinom</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">&quot;y_multinom&quot;</span><span class="p">:</span> <span class="n">all_y_multinom_set</span> <span class="k">if</span> <span class="n">has_multinom</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">&quot;x_negbin&quot;</span><span class="p">:</span> <span class="n">all_x_negbin_set</span> <span class="k">if</span> <span class="n">has_negbin</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">&quot;y_negbin&quot;</span><span class="p">:</span> <span class="n">all_y_negbin_set</span> <span class="k">if</span> <span class="n">has_negbin</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">&quot;x_gamma&quot;</span><span class="p">:</span> <span class="n">all_x_gamma_set</span> <span class="k">if</span> <span class="n">has_gamma</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">&quot;y_gamma&quot;</span><span class="p">:</span> <span class="n">all_y_gamma_set</span> <span class="k">if</span> <span class="n">has_gamma</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">&quot;x_nested_set&quot;</span><span class="p">:</span> <span class="n">all_x_gauss_nested_set</span> <span class="k">if</span> <span class="n">has_gauss</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">&quot;y_nested_set&quot;</span><span class="p">:</span> <span class="n">all_y_gauss_nested_set</span> <span class="k">if</span> <span class="n">has_gauss</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">&quot;true_states&quot;</span><span class="p">:</span> <span class="n">all_state_sequences</span><span class="p">,</span>
+        <span class="s2">&quot;true_params&quot;</span><span class="p">:</span> <span class="n">true_params</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">simulated_data</span></div>
+
+
+
+<div class="viewcode-block" id="find_best_permutation">
+<a class="viewcode-back" href="../../api.html#glmhmm.utils.find_best_permutation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">find_best_permutation</span><span class="p">(</span><span class="n">true_params</span><span class="p">,</span> <span class="n">fit_output</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Finds the state permutation that minimizes the MSE between true and fitted parameters.</span>
+<span class="sd">    Handles &#39;base class&#39; alignment for transition weights (theta) automatically.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        true_params (dict): Dictionary containing true parameters.</span>
+<span class="sd">        fit_output (namedtuple): Output from fit_glmhmm containing fitted parameters.</span>
+<span class="sd">        </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        best_perm (tuple): The optimal order of states (e.g., (2, 0, 1))</span>
+<span class="sd">        permuted_fit (dict): A dictionary with the fitted parameters re-ordered to match truth.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="c1"># 1. Check which parameters are present</span>
+    <span class="c1"># -----------------------------------</span>
+    <span class="c1"># Bernoulli</span>
+    <span class="n">has_bern</span> <span class="o">=</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">fit_output</span><span class="p">,</span> <span class="s1">&#39;W_bern&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">fit_output</span><span class="o">.</span><span class="n">W_bern</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s1">&#39;W_bern&#39;</span> <span class="ow">in</span> <span class="n">true_params</span> <span class="ow">and</span> <span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;W_bern&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="c1"># Transitions</span>
+    <span class="n">has_input_trans</span> <span class="o">=</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">fit_output</span><span class="p">,</span> <span class="s1">&#39;theta&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">fit_output</span><span class="o">.</span><span class="n">theta</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s1">&#39;theta&#39;</span> <span class="ow">in</span> <span class="n">true_params</span> <span class="ow">and</span> <span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;theta&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="n">has_static_trans</span> <span class="o">=</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">fit_output</span><span class="p">,</span> <span class="s1">&#39;log_A&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">fit_output</span><span class="o">.</span><span class="n">log_A</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s1">&#39;A&#39;</span> <span class="ow">in</span> <span class="n">true_params</span> <span class="ow">and</span> <span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;A&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="c1"># Multinomial</span>
+    <span class="n">has_multinom</span> <span class="o">=</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">fit_output</span><span class="p">,</span> <span class="s1">&#39;W_multinom&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">fit_output</span><span class="o">.</span><span class="n">W_multinom</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s1">&#39;W_multinom&#39;</span> <span class="ow">in</span> <span class="n">true_params</span> <span class="ow">and</span> <span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;W_multinom&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="c1"># NegBin</span>
+    <span class="n">has_negbin</span> <span class="o">=</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">fit_output</span><span class="p">,</span> <span class="s1">&#39;W_negbin&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">fit_output</span><span class="o">.</span><span class="n">W_negbin</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s1">&#39;W_negbin&#39;</span> <span class="ow">in</span> <span class="n">true_params</span> <span class="ow">and</span> <span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;W_negbin&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="n">has_phi_nb</span> <span class="o">=</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">fit_output</span><span class="p">,</span> <span class="s1">&#39;phi_negbin&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">fit_output</span><span class="o">.</span><span class="n">phi_negbin</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s1">&#39;phi_negbin&#39;</span> <span class="ow">in</span> <span class="n">true_params</span> <span class="ow">and</span> <span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;phi_negbin&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="c1"># Gamma</span>
+    <span class="n">has_gamma</span> <span class="o">=</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">fit_output</span><span class="p">,</span> <span class="s1">&#39;W_gamma&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">fit_output</span><span class="o">.</span><span class="n">W_gamma</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s1">&#39;W_gamma&#39;</span> <span class="ow">in</span> <span class="n">true_params</span> <span class="ow">and</span> <span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;W_gamma&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="n">has_alpha_gm</span> <span class="o">=</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">fit_output</span><span class="p">,</span> <span class="s1">&#39;alpha_gamma&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">fit_output</span><span class="o">.</span><span class="n">alpha_gamma</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s1">&#39;alpha_gamma&#39;</span> <span class="ow">in</span> <span class="n">true_params</span> <span class="ow">and</span> <span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;alpha_gamma&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="c1"># Gaussian</span>
+    <span class="n">has_gauss</span> <span class="o">=</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">fit_output</span><span class="p">,</span> <span class="s1">&#39;W_gauss&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">fit_output</span><span class="o">.</span><span class="n">W_gauss</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s1">&#39;W_gauss&#39;</span> <span class="ow">in</span> <span class="n">true_params</span> <span class="ow">and</span> <span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;W_gauss&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+    <span class="n">n_states</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">if</span> <span class="n">has_bern</span><span class="p">:</span>
+        <span class="n">n_states</span> <span class="o">=</span> <span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;W_bern&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">has_input_trans</span><span class="p">:</span>
+        <span class="n">n_states</span> <span class="o">=</span> <span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;theta&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">has_static_trans</span><span class="p">:</span>
+        <span class="n">n_states</span> <span class="o">=</span> <span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;A&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">has_multinom</span><span class="p">:</span>
+        <span class="n">n_states</span> <span class="o">=</span> <span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;W_multinom&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="c1"># (F, C, K)</span>
+    
+    <span class="k">if</span> <span class="n">n_states</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="c1"># Fallback if no params found or logic fails</span>
+        <span class="c1"># Try to infer from fit output if true_params is incomplete?</span>
+        <span class="c1"># For now assume true_params is complete enough</span>
+         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Could not determine n_states or find matching parameters.&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Helper: Align Multinomial-like weights (subtract last class/column)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">align_last_dim_zero</span><span class="p">(</span><span class="n">w</span><span class="p">):</span>
+        <span class="c1"># w shape: (..., K) - NO, this is for (F, C, K) where C is choices?</span>
+        <span class="c1"># For Theta: (F, From, To) -&gt; Subtract last &#39;To&#39; column</span>
+        <span class="c1"># For Multinom: (F, C, K) -&gt; Subtract last &#39;C&#39; row?</span>
+        <span class="c1"># The fit forces last category to 0. </span>
+        <span class="c1"># But permutation is over K (states).</span>
+        <span class="c1"># We need to handle identifiable comparisons.</span>
+        <span class="k">pass</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">align_trans_weights</span><span class="p">(</span><span class="n">w</span><span class="p">):</span>
+        <span class="c1"># w shape: (Features, From, To)</span>
+        <span class="c1"># Subtract the last &#39;To&#39; column</span>
+        <span class="n">base_col</span> <span class="o">=</span> <span class="n">w</span><span class="p">[:,</span> <span class="p">:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">:]</span> 
+        <span class="k">return</span> <span class="n">w</span> <span class="o">-</span> <span class="n">base_col</span>
+
+    <span class="c1"># 2. Iterate through all Permutations</span>
+    <span class="c1"># -----------------------------------</span>
+    <span class="n">best_perm</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">best_mse</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s1">&#39;inf&#39;</span><span class="p">)</span>
+    
+    <span class="c1"># Pre-fetch numpy arrays to avoid repeated conversion</span>
+    <span class="n">t_W_b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;W_bern&#39;</span><span class="p">])</span> <span class="k">if</span> <span class="n">has_bern</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">f_W_b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">fit_output</span><span class="o">.</span><span class="n">W_bern</span><span class="p">)</span> <span class="k">if</span> <span class="n">has_bern</span> <span class="k">else</span> <span class="kc">None</span>
+    
+    <span class="n">t_theta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;theta&#39;</span><span class="p">])</span> <span class="k">if</span> <span class="n">has_input_trans</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">f_theta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">fit_output</span><span class="o">.</span><span class="n">theta</span><span class="p">)</span> <span class="k">if</span> <span class="n">has_input_trans</span> <span class="k">else</span> <span class="kc">None</span>
+    
+    <span class="n">t_A</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;A&#39;</span><span class="p">])</span> <span class="k">if</span> <span class="n">has_static_trans</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">f_log_A</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">fit_output</span><span class="o">.</span><span class="n">log_A</span><span class="p">)</span> <span class="k">if</span> <span class="n">has_static_trans</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">f_A</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">f_log_A</span><span class="p">)</span> <span class="k">if</span> <span class="n">has_static_trans</span> <span class="k">else</span> <span class="kc">None</span>
+    
+    <span class="n">t_W_mn</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;W_multinom&#39;</span><span class="p">])</span> <span class="k">if</span> <span class="n">has_multinom</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">f_W_mn</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">fit_output</span><span class="o">.</span><span class="n">W_multinom</span><span class="p">)</span> <span class="k">if</span> <span class="n">has_multinom</span> <span class="k">else</span> <span class="kc">None</span>
+    
+    <span class="n">t_W_nb</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;W_negbin&#39;</span><span class="p">])</span> <span class="k">if</span> <span class="n">has_negbin</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">f_W_nb</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">fit_output</span><span class="o">.</span><span class="n">W_negbin</span><span class="p">)</span> <span class="k">if</span> <span class="n">has_negbin</span> <span class="k">else</span> <span class="kc">None</span>
+    
+    <span class="n">t_phi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;phi_negbin&#39;</span><span class="p">])</span> <span class="k">if</span> <span class="n">has_phi_nb</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">f_phi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">fit_output</span><span class="o">.</span><span class="n">phi_negbin</span><span class="p">)</span> <span class="k">if</span> <span class="n">has_phi_nb</span> <span class="k">else</span> <span class="kc">None</span>
+    
+    <span class="n">t_W_gm</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;W_gamma&#39;</span><span class="p">])</span> <span class="k">if</span> <span class="n">has_gamma</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">f_W_gm</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">fit_output</span><span class="o">.</span><span class="n">W_gamma</span><span class="p">)</span> <span class="k">if</span> <span class="n">has_gamma</span> <span class="k">else</span> <span class="kc">None</span>
+    
+    <span class="n">t_alpha</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;alpha_gamma&#39;</span><span class="p">])</span> <span class="k">if</span> <span class="n">has_alpha_gm</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">f_alpha</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">fit_output</span><span class="o">.</span><span class="n">alpha_gamma</span><span class="p">)</span> <span class="k">if</span> <span class="n">has_alpha_gm</span> <span class="k">else</span> <span class="kc">None</span>
+    
+    <span class="n">t_W_gs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;W_gauss&#39;</span><span class="p">])</span> <span class="k">if</span> <span class="n">has_gauss</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">f_W_gs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">fit_output</span><span class="o">.</span><span class="n">W_gauss</span><span class="p">)</span> <span class="k">if</span> <span class="n">has_gauss</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">t_Sig</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">true_params</span><span class="p">[</span><span class="s1">&#39;Sigma_gauss&#39;</span><span class="p">])</span> <span class="k">if</span> <span class="n">has_gauss</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">f_Sig</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">fit_output</span><span class="o">.</span><span class="n">Sigma_gauss</span><span class="p">)</span> <span class="k">if</span> <span class="n">has_gauss</span> <span class="k">else</span> <span class="kc">None</span>
+    
+    
+    <span class="k">for</span> <span class="n">p_tuple</span> <span class="ow">in</span> <span class="n">itertools</span><span class="o">.</span><span class="n">permutations</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n_states</span><span class="p">)):</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">p_tuple</span><span class="p">)</span>
+        <span class="n">current_mse</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
+        
+        <span class="c1"># --- Bernoulli (F, K) ---</span>
+        <span class="k">if</span> <span class="n">has_bern</span><span class="p">:</span>
+            <span class="c1"># Permute assumption: Columns are states</span>
+            <span class="n">perm_W_b</span> <span class="o">=</span> <span class="n">f_W_b</span><span class="p">[:,</span> <span class="n">p</span><span class="p">]</span>
+            <span class="n">current_mse</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">((</span><span class="n">perm_W_b</span> <span class="o">-</span> <span class="n">t_W_b</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+            
+        <span class="c1"># --- Input Transitions (F, K, K) ---</span>
+        <span class="k">if</span> <span class="n">has_input_trans</span><span class="p">:</span>
+            <span class="c1"># Permute rows (From) and cols (To)</span>
+            <span class="n">perm_theta</span> <span class="o">=</span> <span class="n">f_theta</span><span class="p">[:,</span> <span class="n">p</span><span class="p">,</span> <span class="p">:][:,</span> <span class="p">:,</span> <span class="n">p</span><span class="p">]</span>
+            <span class="c1"># Align</span>
+            <span class="n">t_aligned</span> <span class="o">=</span> <span class="n">align_trans_weights</span><span class="p">(</span><span class="n">t_theta</span><span class="p">)</span>
+            <span class="n">p_aligned</span> <span class="o">=</span> <span class="n">align_trans_weights</span><span class="p">(</span><span class="n">perm_theta</span><span class="p">)</span>
+            <span class="n">current_mse</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">((</span><span class="n">p_aligned</span> <span class="o">-</span> <span class="n">t_aligned</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+            
+        <span class="c1"># --- Static Transitions (K, K) ---</span>
+        <span class="k">if</span> <span class="n">has_static_trans</span><span class="p">:</span>
+            <span class="c1"># Permute rows and cols</span>
+            <span class="n">perm_A</span> <span class="o">=</span> <span class="n">f_A</span><span class="p">[</span><span class="n">p</span><span class="p">,</span> <span class="p">:][:,</span> <span class="n">p</span><span class="p">]</span>
+            <span class="n">current_mse</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">((</span><span class="n">perm_A</span> <span class="o">-</span> <span class="n">t_A</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+            
+        <span class="c1"># --- Multinomial (F, C, K) ---</span>
+        <span class="k">if</span> <span class="n">has_multinom</span><span class="p">:</span>
+            <span class="c1"># Permute axis 2 (States)</span>
+            <span class="n">perm_W_mn</span> <span class="o">=</span> <span class="n">f_W_mn</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">p</span><span class="p">]</span>
+            <span class="c1"># Alignment: The fit forces the LAST category to 0. </span>
+            <span class="c1"># The True parameters might not have this property.</span>
+            <span class="c1"># We align both to have the last category = 0 by subtracting the last column&#39;s value from all columns.</span>
+            <span class="c1"># Shape (F, C, K). We subtract slice (F, 1, K)</span>
+            
+            <span class="n">p_mn_aligned</span> <span class="o">=</span> <span class="n">perm_W_mn</span> <span class="o">-</span> <span class="n">perm_W_mn</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">:,</span> <span class="p">:]</span>
+            <span class="n">t_mn_aligned</span> <span class="o">=</span> <span class="n">t_W_mn</span> <span class="o">-</span> <span class="n">t_W_mn</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">:,</span> <span class="p">:]</span>
+            
+            <span class="n">current_mse</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">((</span><span class="n">p_mn_aligned</span> <span class="o">-</span> <span class="n">t_mn_aligned</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+            
+        <span class="c1"># --- NegBin W (F, K) ---</span>
+        <span class="k">if</span> <span class="n">has_negbin</span><span class="p">:</span>
+            <span class="n">perm_W_nb</span> <span class="o">=</span> <span class="n">f_W_nb</span><span class="p">[:,</span> <span class="n">p</span><span class="p">]</span>
+            <span class="n">current_mse</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">((</span><span class="n">perm_W_nb</span> <span class="o">-</span> <span class="n">t_W_nb</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+            
+        <span class="c1"># --- NegBin Phi (K,) ---</span>
+        <span class="k">if</span> <span class="n">has_phi_nb</span><span class="p">:</span>
+            <span class="n">perm_phi</span> <span class="o">=</span> <span class="n">f_phi</span><span class="p">[</span><span class="n">p</span><span class="p">]</span> <span class="c1"># Tuple to list/array?</span>
+            <span class="n">current_mse</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">((</span><span class="n">perm_phi</span> <span class="o">-</span> <span class="n">t_phi</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="c1"># --- Gamma W (F, K) ---</span>
+        <span class="k">if</span> <span class="n">has_gamma</span><span class="p">:</span>
+            <span class="n">perm_W_gm</span> <span class="o">=</span> <span class="n">f_W_gm</span><span class="p">[:,</span> <span class="n">p</span><span class="p">]</span>
+            <span class="n">current_mse</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">((</span><span class="n">perm_W_gm</span> <span class="o">-</span> <span class="n">t_W_gm</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+            
+        <span class="c1"># --- Gamma Alpha (K,) ---</span>
+        <span class="k">if</span> <span class="n">has_alpha_gm</span><span class="p">:</span>
+            <span class="n">perm_alpha</span> <span class="o">=</span> <span class="n">f_alpha</span><span class="p">[</span><span class="n">p</span><span class="p">]</span>
+            <span class="n">current_mse</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">((</span><span class="n">perm_alpha</span> <span class="o">-</span> <span class="n">t_alpha</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+            
+        <span class="c1"># --- Gaussian (W, Sigma) ---</span>
+        <span class="k">if</span> <span class="n">has_gauss</span><span class="p">:</span>
+            <span class="c1"># W: (D, M, K) -&gt; Permute axis 2</span>
+            <span class="n">perm_W_gs</span> <span class="o">=</span> <span class="n">f_W_gs</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">p</span><span class="p">]</span>
+            <span class="n">current_mse</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">((</span><span class="n">perm_W_gs</span> <span class="o">-</span> <span class="n">t_W_gs</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+            <span class="c1"># Sigma: (M, M, K) -&gt; Permute axis 2</span>
+            <span class="n">perm_Sig</span> <span class="o">=</span> <span class="n">f_Sig</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">p</span><span class="p">]</span>
+            <span class="n">current_mse</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">((</span><span class="n">perm_Sig</span> <span class="o">-</span> <span class="n">t_Sig</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+            
+        <span class="k">if</span> <span class="n">current_mse</span> <span class="o">&lt;</span> <span class="n">best_mse</span><span class="p">:</span>
+            <span class="n">best_mse</span> <span class="o">=</span> <span class="n">current_mse</span>
+            <span class="n">best_perm</span> <span class="o">=</span> <span class="n">p</span>
+
+    <span class="c1"># 3. Construct the Permuted Result</span>
+    <span class="c1"># --------------------------------</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Best Permutation found: </span><span class="si">{</span><span class="n">best_perm</span><span class="si">}</span><span class="s2"> with MSE: </span><span class="si">{</span><span class="n">best_mse</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    
+    <span class="n">permuted_results</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">p</span> <span class="o">=</span> <span class="n">best_perm</span>
+    
+    <span class="k">if</span> <span class="n">has_bern</span><span class="p">:</span> <span class="n">permuted_results</span><span class="p">[</span><span class="s1">&#39;W_bern&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">f_W_b</span><span class="p">[:,</span> <span class="n">p</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">has_input_trans</span><span class="p">:</span>
+        <span class="n">pt</span> <span class="o">=</span> <span class="n">f_theta</span><span class="p">[:,</span> <span class="n">p</span><span class="p">,</span> <span class="p">:][:,</span> <span class="p">:,</span> <span class="n">p</span><span class="p">]</span>
+        <span class="n">permuted_results</span><span class="p">[</span><span class="s1">&#39;theta&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">align_trans_weights</span><span class="p">(</span><span class="n">pt</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">has_static_trans</span><span class="p">:</span>
+        <span class="n">pA</span> <span class="o">=</span> <span class="n">f_A</span><span class="p">[</span><span class="n">p</span><span class="p">,</span> <span class="p">:][:,</span> <span class="n">p</span><span class="p">]</span>
+        <span class="n">permuted_results</span><span class="p">[</span><span class="s1">&#39;A&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pA</span>
+        <span class="n">permuted_results</span><span class="p">[</span><span class="s1">&#39;log_A&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">pA</span> <span class="o">+</span> <span class="mf">1e-9</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">has_multinom</span><span class="p">:</span>
+        <span class="c1"># Also return aligned version for consistency in plotting</span>
+        <span class="n">p_mn</span> <span class="o">=</span> <span class="n">f_W_mn</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">p</span><span class="p">]</span>
+        <span class="n">permuted_results</span><span class="p">[</span><span class="s1">&#39;W_multinom&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">p_mn</span> <span class="o">-</span> <span class="n">p_mn</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">:,</span> <span class="p">:]</span>
+    <span class="k">if</span> <span class="n">has_negbin</span><span class="p">:</span> <span class="n">permuted_results</span><span class="p">[</span><span class="s1">&#39;W_negbin&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">f_W_nb</span><span class="p">[:,</span> <span class="n">p</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">has_phi_nb</span><span class="p">:</span> <span class="n">permuted_results</span><span class="p">[</span><span class="s1">&#39;phi_negbin&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">f_phi</span><span class="p">[</span><span class="n">p</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">has_gamma</span><span class="p">:</span> <span class="n">permuted_results</span><span class="p">[</span><span class="s1">&#39;W_gamma&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">f_W_gm</span><span class="p">[:,</span> <span class="n">p</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">has_alpha_gm</span><span class="p">:</span> <span class="n">permuted_results</span><span class="p">[</span><span class="s1">&#39;alpha_gamma&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">f_alpha</span><span class="p">[</span><span class="n">p</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">has_gauss</span><span class="p">:</span>
+        <span class="n">permuted_results</span><span class="p">[</span><span class="s1">&#39;W_gauss&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">f_W_gs</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">p</span><span class="p">]</span>
+        <span class="n">permuted_results</span><span class="p">[</span><span class="s1">&#39;Sigma_gauss&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">f_Sig</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">p</span><span class="p">]</span>
+        
+    <span class="k">return</span> <span class="n">best_perm</span><span class="p">,</span> <span class="n">permuted_results</span></div>
+
+</pre></div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2025, User
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="../../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>
+    </body>
+</html>

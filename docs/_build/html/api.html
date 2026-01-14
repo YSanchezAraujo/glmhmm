@@ -1,0 +1,922 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="./">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="prev" title="Welcome to GLM-HMM’s documentation!" href="index.html">
+
+    <!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
+        <title>API Reference - glmhmm 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="index.html"><div class="brand">glmhmm 0.1.0 documentation</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
+  
+  <span class="sidebar-brand-text">glmhmm 0.1.0 documentation</span>
+  
+</a><form class="sidebar-search-container" method="get" action="search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">API Reference</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="_sources/api.rst.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="module-glmhmm">
+<span id="api-reference"></span><h1>API Reference<a class="headerlink" href="#module-glmhmm" title="Link to this heading">¶</a></h1>
+<section id="module-glmhmm.fit">
+<span id="fitting"></span><h2>Fitting<a class="headerlink" href="#module-glmhmm.fit" title="Link to this heading">¶</a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.fit.compute_total_emissions">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.fit.</span></span><span class="sig-name descname"><span class="pre">compute_total_emissions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#glmhmm.structs.GLMHMMParams" title="glmhmm.structs.GLMHMMParams"><span class="pre">GLMHMMParams</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_b</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_b</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_mn</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_mn</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_nb</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_nb</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_gm</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_gm</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_gs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_gs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gs_first</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gs_last</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gs_segment_ids</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jax.numpy.ndarray</span></span></span><a class="headerlink" href="#glmhmm.fit.compute_total_emissions" title="Link to this definition">¶</a></dt>
+<dd><p>Computes total log-likelihoods by summing across all active emission distributions.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.fit.e_step">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.fit.</span></span><span class="sig-name descname"><span class="pre">e_step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#glmhmm.structs.GLMHMMParams" title="glmhmm.structs.GLMHMMParams"><span class="pre">GLMHMMParams</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#glmhmm.structs.GLMHMMData" title="glmhmm.structs.GLMHMMData"><span class="pre">GLMHMMData</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/glmhmm/fit.html#e_step"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#glmhmm.fit.e_step" title="Link to this definition">¶</a></dt>
+<dd><p>Performs the E-step of the EM algorithm for GLMHMM.</p>
+<p>Computes posterior probabilities (responsibilities) for states and transitions
+using the forward-backward algorithm. Processes all sequences in the dataset.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>params</strong> – Current GLMHMM parameters.</p></li>
+<li><p><strong>data</strong> – Dataset containing all observation sequences and covariates.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>List of state responsibilities for each sequence.</dt><dd><p>Each element has shape (T_i, K) where T_i is the length of sequence i.</p>
+</dd>
+<dt>xis: List of transition responsibilities for each sequence.</dt><dd><p>Each element has shape (T_i-1, K, K).</p>
+</dd>
+</dl>
+<p>total_lml: Total log marginal likelihood across all sequences (scalar).</p>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>gammas</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.fit.fit_glmhmm">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.fit.</span></span><span class="sig-name descname"><span class="pre">fit_glmhmm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#glmhmm.structs.GLMHMMData" title="glmhmm.structs.GLMHMMData"><span class="pre">GLMHMMData</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#glmhmm.structs.GLMHMMConfig" title="glmhmm.structs.GLMHMMConfig"><span class="pre">GLMHMMConfig</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#glmhmm.structs.GLMHMMParams" title="glmhmm.structs.GLMHMMParams"><span class="pre">GLMHMMParams</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/glmhmm/fit.html#fit_glmhmm"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#glmhmm.fit.fit_glmhmm" title="Link to this definition">¶</a></dt>
+<dd><p>Fits a Generalized Linear Model Hidden Markov Model using the EM algorithm.</p>
+<p>This is the main entry point for training a GLMHMM. It alternates between:
+- E-step: Computing state/transition responsibilities using forward-backward
+- M-step: Updating parameters to maximize expected complete-data likelihood</p>
+<p>The algorithm continues until convergence (change in log-likelihood &lt; tolerance)
+or the maximum number of iterations is reached.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> – GLMHMMData object containing:
+- Observation sequences for each emission type
+- Covariate sequences for emissions and transitions
+All sequences should have the same length within each list.</p></li>
+<li><p><strong>config</strong> – GLMHMMConfig containing:
+- num_states: Number of hidden states (K)
+- num_em_iters: Maximum EM iterations
+- tol: Convergence tolerance for log-likelihood
+- l2_reg_*: Regularization parameters for each distribution</p></li>
+<li><p><strong>initial_params</strong> – Optional GLMHMMParams object to initialize the model.
+If None, parameters are initialized randomly.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>Fitted GLMHMM parameters including:</dt><dd><ul class="simple">
+<li><p>log_pi0: Initial state log-probabilities</p></li>
+<li><p>log_A or theta: Transition parameters</p></li>
+<li><p>W_*: Emission weights for each active distribution</p></li>
+<li><p>phi_negbin, alpha_gamma: Dispersion parameters if applicable</p></li>
+</ul>
+</dd>
+<dt>lml_history: List of log marginal likelihoods at each EM iteration.</dt><dd><p>Can be used to diagnose convergence.</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>params</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">GLMHMMData</span><span class="p">(</span><span class="n">x_bern</span><span class="o">=</span><span class="p">[</span><span class="n">X1</span><span class="p">,</span> <span class="n">X2</span><span class="p">],</span> <span class="n">y_bern</span><span class="o">=</span><span class="p">[</span><span class="n">y1</span><span class="p">,</span> <span class="n">y2</span><span class="p">],</span> <span class="o">...</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">GLMHMMConfig</span><span class="p">(</span><span class="n">num_states</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">num_em_iters</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">l2_reg_bern</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span><span class="p">,</span> <span class="n">lml_history</span> <span class="o">=</span> <span class="n">fit_glmhmm</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.fit.m_step">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.fit.</span></span><span class="sig-name descname"><span class="pre">m_step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#glmhmm.structs.GLMHMMParams" title="glmhmm.structs.GLMHMMParams"><span class="pre">GLMHMMParams</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#glmhmm.structs.GLMHMMData" title="glmhmm.structs.GLMHMMData"><span class="pre">GLMHMMData</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">gammas</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">jax.numpy.ndarray</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">jax.numpy.ndarray</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#glmhmm.structs.GLMHMMConfig" title="glmhmm.structs.GLMHMMConfig"><span class="pre">GLMHMMConfig</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#glmhmm.structs.GLMHMMParams" title="glmhmm.structs.GLMHMMParams"><span class="pre">GLMHMMParams</span></a></span></span><a class="reference internal" href="_modules/glmhmm/fit.html#m_step"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#glmhmm.fit.m_step" title="Link to this definition">¶</a></dt>
+<dd><p>Performs the M-step of the EM algorithm for GLMHMM.</p>
+<p>Updates all model parameters by maximizing the expected complete-data log-likelihood
+using the responsibilities computed in the E-step. Each emission distribution and
+the transition parameters are updated independently.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>params</strong> – Current GLMHMM parameters.</p></li>
+<li><p><strong>data</strong> – Dataset containing all observation sequences and covariates.</p></li>
+<li><p><strong>gammas</strong> – State responsibilities from E-step, list of arrays with shape (T_i, K).</p></li>
+<li><p><strong>xis</strong> – Transition responsibilities from E-step, list of arrays with shape (T_i-1, K, K).</p></li>
+<li><p><strong>config</strong> – Configuration containing regularization parameters and other settings.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Updated GLMHMM parameters with optimized emission weights, dispersion parameters,
+and transition parameters (theta or log_A depending on model type).</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="module-glmhmm.initialize">
+<span id="initialization"></span><h2>Initialization<a class="headerlink" href="#module-glmhmm.initialize" title="Link to this heading">¶</a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.initialize.initialize_params">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.initialize.</span></span><span class="sig-name descname"><span class="pre">initialize_params</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#glmhmm.structs.GLMHMMData" title="glmhmm.structs.GLMHMMData"><span class="pre">GLMHMMData</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#glmhmm.structs.GLMHMMConfig" title="glmhmm.structs.GLMHMMConfig"><span class="pre">GLMHMMConfig</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#glmhmm.structs.GLMHMMParams" title="glmhmm.structs.GLMHMMParams"><span class="pre">GLMHMMParams</span></a></span></span><a class="reference internal" href="_modules/glmhmm/initialize.html#initialize_params"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#glmhmm.initialize.initialize_params" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-glmhmm.structs">
+<span id="data-structures"></span><h2>Data Structures<a class="headerlink" href="#module-glmhmm.structs" title="Link to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="glmhmm.structs.EMState">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">glmhmm.structs.</span></span><span class="sig-name descname"><span class="pre">EMState</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">iteration</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lml</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lml_history</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/glmhmm/structs.html#EMState"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#glmhmm.structs.EMState" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">NamedTuple</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.EMState.iteration">
+<span class="sig-name descname"><span class="pre">iteration</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#glmhmm.structs.EMState.iteration" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 1</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.EMState.lml">
+<span class="sig-name descname"><span class="pre">lml</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#glmhmm.structs.EMState.lml" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 2</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.EMState.lml_history">
+<span class="sig-name descname"><span class="pre">lml_history</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">jax.numpy.ndarray</span></em><a class="headerlink" href="#glmhmm.structs.EMState.lml_history" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 3</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.EMState.params">
+<span class="sig-name descname"><span class="pre">params</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#glmhmm.structs.GLMHMMParams" title="glmhmm.structs.GLMHMMParams"><span class="pre">GLMHMMParams</span></a></em><a class="headerlink" href="#glmhmm.structs.EMState.params" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 0</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMConfig">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">glmhmm.structs.</span></span><span class="sig-name descname"><span class="pre">GLMHMMConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_states</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_em_iters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">l2_reg_bern</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">l2_reg_multinom</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">l2_reg_negbin</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">l2_reg_gamma</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">l2_reg_trans</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">l2_reg_gauss</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/glmhmm/structs.html#GLMHMMConfig"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#glmhmm.structs.GLMHMMConfig" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">NamedTuple</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMConfig.l2_reg_bern">
+<span class="sig-name descname"><span class="pre">l2_reg_bern</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMConfig.l2_reg_bern" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 3</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMConfig.l2_reg_gamma">
+<span class="sig-name descname"><span class="pre">l2_reg_gamma</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMConfig.l2_reg_gamma" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 6</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMConfig.l2_reg_gauss">
+<span class="sig-name descname"><span class="pre">l2_reg_gauss</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMConfig.l2_reg_gauss" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 8</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMConfig.l2_reg_multinom">
+<span class="sig-name descname"><span class="pre">l2_reg_multinom</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMConfig.l2_reg_multinom" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 4</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMConfig.l2_reg_negbin">
+<span class="sig-name descname"><span class="pre">l2_reg_negbin</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMConfig.l2_reg_negbin" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 5</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMConfig.l2_reg_trans">
+<span class="sig-name descname"><span class="pre">l2_reg_trans</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMConfig.l2_reg_trans" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 7</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMConfig.num_em_iters">
+<span class="sig-name descname"><span class="pre">num_em_iters</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMConfig.num_em_iters" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 1</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMConfig.num_states">
+<span class="sig-name descname"><span class="pre">num_states</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMConfig.num_states" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 0</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMConfig.tol">
+<span class="sig-name descname"><span class="pre">tol</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMConfig.tol" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 2</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMData">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">glmhmm.structs.</span></span><span class="sig-name descname"><span class="pre">GLMHMMData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x_trans</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_bern</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_bern</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_multinom</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_multinom</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_negbin</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_negbin</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_gamma</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_gamma</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_gauss</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_gauss</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gauss_first_idx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gauss_last_idx</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/glmhmm/structs.html#GLMHMMData"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#glmhmm.structs.GLMHMMData" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">NamedTuple</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMData.gauss_first_idx">
+<span class="sig-name descname"><span class="pre">gauss_first_idx</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMData.gauss_first_idx" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 11</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMData.gauss_last_idx">
+<span class="sig-name descname"><span class="pre">gauss_last_idx</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMData.gauss_last_idx" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 12</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMData.x_bern">
+<span class="sig-name descname"><span class="pre">x_bern</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMData.x_bern" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 1</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMData.x_gamma">
+<span class="sig-name descname"><span class="pre">x_gamma</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMData.x_gamma" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 7</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMData.x_gauss">
+<span class="sig-name descname"><span class="pre">x_gauss</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMData.x_gauss" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 9</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMData.x_multinom">
+<span class="sig-name descname"><span class="pre">x_multinom</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMData.x_multinom" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 3</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMData.x_negbin">
+<span class="sig-name descname"><span class="pre">x_negbin</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMData.x_negbin" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 5</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMData.x_trans">
+<span class="sig-name descname"><span class="pre">x_trans</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMData.x_trans" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 0</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMData.y_bern">
+<span class="sig-name descname"><span class="pre">y_bern</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMData.y_bern" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 2</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMData.y_gamma">
+<span class="sig-name descname"><span class="pre">y_gamma</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMData.y_gamma" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 8</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMData.y_gauss">
+<span class="sig-name descname"><span class="pre">y_gauss</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMData.y_gauss" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 10</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMData.y_multinom">
+<span class="sig-name descname"><span class="pre">y_multinom</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMData.y_multinom" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 4</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMData.y_negbin">
+<span class="sig-name descname"><span class="pre">y_negbin</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMData.y_negbin" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 6</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMParams">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">glmhmm.structs.</span></span><span class="sig-name descname"><span class="pre">GLMHMMParams</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">log_pi0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_A</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">theta</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">W_bern</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">W_multinom</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">W_negbin</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phi_negbin</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">W_gamma</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha_gamma</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">W_gauss</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Sigma_gauss</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/glmhmm/structs.html#GLMHMMParams"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#glmhmm.structs.GLMHMMParams" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">NamedTuple</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMParams.Sigma_gauss">
+<span class="sig-name descname"><span class="pre">Sigma_gauss</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">jax.numpy.ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMParams.Sigma_gauss" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 10</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMParams.W_bern">
+<span class="sig-name descname"><span class="pre">W_bern</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">jax.numpy.ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMParams.W_bern" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 3</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMParams.W_gamma">
+<span class="sig-name descname"><span class="pre">W_gamma</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">jax.numpy.ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMParams.W_gamma" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 7</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMParams.W_gauss">
+<span class="sig-name descname"><span class="pre">W_gauss</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">jax.numpy.ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMParams.W_gauss" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 9</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMParams.W_multinom">
+<span class="sig-name descname"><span class="pre">W_multinom</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">jax.numpy.ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMParams.W_multinom" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 4</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMParams.W_negbin">
+<span class="sig-name descname"><span class="pre">W_negbin</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">jax.numpy.ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMParams.W_negbin" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 5</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMParams.alpha_gamma">
+<span class="sig-name descname"><span class="pre">alpha_gamma</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">jax.numpy.ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMParams.alpha_gamma" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 8</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMParams.log_A">
+<span class="sig-name descname"><span class="pre">log_A</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">jax.numpy.ndarray</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMParams.log_A" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 1</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMParams.log_pi0">
+<span class="sig-name descname"><span class="pre">log_pi0</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">jax.numpy.ndarray</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMParams.log_pi0" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 0</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMParams.phi_negbin">
+<span class="sig-name descname"><span class="pre">phi_negbin</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">jax.numpy.ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMParams.phi_negbin" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 6</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="glmhmm.structs.GLMHMMParams.theta">
+<span class="sig-name descname"><span class="pre">theta</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">jax.numpy.ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#glmhmm.structs.GLMHMMParams.theta" title="Link to this definition">¶</a></dt>
+<dd><p>Alias for field number 2</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-glmhmm.emissions">
+<span id="emissions"></span><h2>Emissions<a class="headerlink" href="#module-glmhmm.emissions" title="Link to this heading">¶</a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.emissions.bernoulli_glmhmm_loglikelihood">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.emissions.</span></span><span class="sig-name descname"><span class="pre">bernoulli_glmhmm_loglikelihood</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">W</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jax.numpy.ndarray</span></span></span><a class="headerlink" href="#glmhmm.emissions.bernoulli_glmhmm_loglikelihood" title="Link to this definition">¶</a></dt>
+<dd><p>Computes the log likelihood of the data under the parameters W</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>X</strong> – Design matrix, shape (n_trials, n_features)</p></li>
+<li><p><strong>y</strong> – Response data (binary 0 or 1), shape (n_trials,)</p></li>
+<li><p><strong>W</strong> – Weight matrix, shape (n_features, n_states)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Log likelihood of the data, shape (n_trials, n_states)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.emissions.gamma_glmhmm_loglikelihood">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.emissions.</span></span><span class="sig-name descname"><span class="pre">gamma_glmhmm_loglikelihood</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">W</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jax.numpy.ndarray</span></span></span><a class="headerlink" href="#glmhmm.emissions.gamma_glmhmm_loglikelihood" title="Link to this definition">¶</a></dt>
+<dd><p>Computes Log-Likelihood for Gamma GLM.</p>
+<dl class="simple">
+<dt>Model:</dt><dd><p>y ~ Gamma(shape=alpha, rate=beta)
+Mean mu = alpha / beta = exp(X &#64; W)  [Log Link]
+Therefore, rate beta = alpha / exp(X &#64; W)</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>X</strong> – Design matrix</p></li>
+<li><p><strong>y</strong> – Response data (must be strictly positive)</p></li>
+<li><p><strong>W</strong> – Weights determining the mean</p></li>
+<li><p><strong>alpha</strong> – Shape parameter per state (controls dispersion/variance)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Log likelihood of the data, shape (n_trials, n_states)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.emissions.gaussian_glmhmm_loglikelihoods">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.emissions.</span></span><span class="sig-name descname"><span class="pre">gaussian_glmhmm_loglikelihoods</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X_gauss</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_gauss</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">W_gauss</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Sigma</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jax.numpy.ndarray</span></span></span><a class="headerlink" href="#glmhmm.emissions.gaussian_glmhmm_loglikelihoods" title="Link to this definition">¶</a></dt>
+<dd><p>Computes the loglikelihoods of the data under the parameters</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>X_gauss</strong> – Design matrix for fluoresence data</p></li>
+<li><p><strong>y_gauss</strong> – Neural data</p></li>
+<li><p><strong>W_gauss</strong> – Time varying kernels for a single state</p></li>
+<li><p><strong>Sigma</strong> – Full covariance matrix for a single state</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Vector of log-likelihoods for a single state</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.emissions.multinomial_glmhmm_loglikelihood">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.emissions.</span></span><span class="sig-name descname"><span class="pre">multinomial_glmhmm_loglikelihood</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">W</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jax.numpy.ndarray</span></span></span><a class="reference internal" href="_modules/glmhmm/emissions.html#multinomial_glmhmm_loglikelihood"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#glmhmm.emissions.multinomial_glmhmm_loglikelihood" title="Link to this definition">¶</a></dt>
+<dd><p>Computes Log-Likelihood for Multinomial GLM.
+Returns (N, K) if W is (F, C, K), or (N,) if W is (F, C).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.emissions.negbin_glmhmm_loglikelihood">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.emissions.</span></span><span class="sig-name descname"><span class="pre">negbin_glmhmm_loglikelihood</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">W</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">phi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jax.numpy.ndarray</span></span></span><a class="headerlink" href="#glmhmm.emissions.negbin_glmhmm_loglikelihood" title="Link to this definition">¶</a></dt>
+<dd><p>Computes Log-Likelihood for Negative Binomial GLM using stable log-space ops.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.emissions.normalized_gauss_loglikelihoods">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.emissions.</span></span><span class="sig-name descname"><span class="pre">normalized_gauss_loglikelihoods</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">all_loglikelihoods</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">first_idx_set</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last_idx_set</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_regions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">segment_ids</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/glmhmm/emissions.html#normalized_gauss_loglikelihoods"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#glmhmm.emissions.normalized_gauss_loglikelihoods" title="Link to this definition">¶</a></dt>
+<dd><p>Computes normalized loglikelihoods of gaussian segements</p>
+</dd></dl>
+
+</section>
+<section id="module-glmhmm.utils">
+<span id="utilities"></span><h2>Utilities<a class="headerlink" href="#module-glmhmm.utils" title="Link to this heading">¶</a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.utils.compute_A_from_theta_and_inputs">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.utils.</span></span><span class="sig-name descname"><span class="pre">compute_A_from_theta_and_inputs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x_trans</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">theta</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jax.numpy.ndarray</span></span></span><a class="reference internal" href="_modules/glmhmm/utils.html#compute_A_from_theta_and_inputs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#glmhmm.utils.compute_A_from_theta_and_inputs" title="Link to this definition">¶</a></dt>
+<dd><p>Computes the time-varying transition matrix A_t.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.utils.compute_boundaries">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.utils.</span></span><span class="sig-name descname"><span class="pre">compute_boundaries</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">list_of_array</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/glmhmm/utils.html#compute_boundaries"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#glmhmm.utils.compute_boundaries" title="Link to this definition">¶</a></dt>
+<dd><p>Computes trial/segment info using jax.numpy.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.utils.find_best_permutation">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.utils.</span></span><span class="sig-name descname"><span class="pre">find_best_permutation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">true_params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fit_output</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/glmhmm/utils.html#find_best_permutation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#glmhmm.utils.find_best_permutation" title="Link to this definition">¶</a></dt>
+<dd><p>Finds the state permutation that minimizes the MSE between true and fitted parameters.
+Handles ‘base class’ alignment for transition weights (theta) automatically.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>true_params</strong> (<em>dict</em>) – Dictionary containing true parameters.</p></li>
+<li><p><strong>fit_output</strong> (<em>namedtuple</em>) – Output from fit_glmhmm containing fitted parameters.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The optimal order of states (e.g., (2, 0, 1))
+permuted_fit (dict): A dictionary with the fitted parameters re-ordered to match truth.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>best_perm (tuple)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.utils.generate_input_driven_inputs">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.utils.</span></span><span class="sig-name descname"><span class="pre">generate_input_driven_inputs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_steps</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_trans_features</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/glmhmm/utils.html#generate_input_driven_inputs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#glmhmm.utils.generate_input_driven_inputs" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.utils.generate_latent_state_sequence">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.utils.</span></span><span class="sig-name descname"><span class="pre">generate_latent_state_sequence</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_steps</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pi0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/glmhmm/utils.html#generate_latent_state_sequence"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#glmhmm.utils.generate_latent_state_sequence" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.utils.read_pickle">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.utils.</span></span><span class="sig-name descname"><span class="pre">read_pickle</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">read_name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/glmhmm/utils.html#read_pickle"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#glmhmm.utils.read_pickle" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.utils.save_pickle">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.utils.</span></span><span class="sig-name descname"><span class="pre">save_pickle</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">save_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obj</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/glmhmm/utils.html#save_pickle"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#glmhmm.utils.save_pickle" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.utils.simulate_data_bernoulli_glmhmm">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.utils.</span></span><span class="sig-name descname"><span class="pre">simulate_data_bernoulli_glmhmm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_states</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_hmm_steps</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_bern_features</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_trans_features</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/glmhmm/utils.html#simulate_data_bernoulli_glmhmm"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#glmhmm.utils.simulate_data_bernoulli_glmhmm" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.utils.simulate_data_for_glmhmm">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.utils.</span></span><span class="sig-name descname"><span class="pre">simulate_data_for_glmhmm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.random.PRNGKey</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">true_params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_sequences</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_hmm_steps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_gauss_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_regions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">samples_per_gaussian_segment</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_bern_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_trans_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_multinom_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_multinom_choices</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_negbin_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_gamma_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="reference internal" href="_modules/glmhmm/utils.html#simulate_data_for_glmhmm"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#glmhmm.utils.simulate_data_for_glmhmm" title="Link to this definition">¶</a></dt>
+<dd><p>Simulates data for the general fit_glmhmm function.
+Can simulate for Bernoulli-only, Gaussian-only, or joint models,
+with static or input-driven transitions.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.utils.simulate_hmm_states_input_driven">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.utils.</span></span><span class="sig-name descname"><span class="pre">simulate_hmm_states_input_driven</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.random.PRNGKey</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pi0</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A_t</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jax.numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_hmm_steps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jax.numpy.ndarray</span></span></span><a class="reference internal" href="_modules/glmhmm/utils.html#simulate_hmm_states_input_driven"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#glmhmm.utils.simulate_hmm_states_input_driven" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="glmhmm.utils.transform_theta">
+<span class="sig-prename descclassname"><span class="pre">glmhmm.utils.</span></span><span class="sig-name descname"><span class="pre">transform_theta</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">theta</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ref_state_ind</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#glmhmm.utils.transform_theta" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          <a class="prev-page" href="index.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Home</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2025, User
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">API Reference</a><ul>
+<li><a class="reference internal" href="#module-glmhmm.fit">Fitting</a><ul>
+<li><a class="reference internal" href="#glmhmm.fit.compute_total_emissions"><code class="docutils literal notranslate"><span class="pre">compute_total_emissions()</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.fit.e_step"><code class="docutils literal notranslate"><span class="pre">e_step()</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.fit.fit_glmhmm"><code class="docutils literal notranslate"><span class="pre">fit_glmhmm()</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.fit.m_step"><code class="docutils literal notranslate"><span class="pre">m_step()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-glmhmm.initialize">Initialization</a><ul>
+<li><a class="reference internal" href="#glmhmm.initialize.initialize_params"><code class="docutils literal notranslate"><span class="pre">initialize_params()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-glmhmm.structs">Data Structures</a><ul>
+<li><a class="reference internal" href="#glmhmm.structs.EMState"><code class="docutils literal notranslate"><span class="pre">EMState</span></code></a><ul>
+<li><a class="reference internal" href="#glmhmm.structs.EMState.iteration"><code class="docutils literal notranslate"><span class="pre">EMState.iteration</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.EMState.lml"><code class="docutils literal notranslate"><span class="pre">EMState.lml</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.EMState.lml_history"><code class="docutils literal notranslate"><span class="pre">EMState.lml_history</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.EMState.params"><code class="docutils literal notranslate"><span class="pre">EMState.params</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMConfig"><code class="docutils literal notranslate"><span class="pre">GLMHMMConfig</span></code></a><ul>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMConfig.l2_reg_bern"><code class="docutils literal notranslate"><span class="pre">GLMHMMConfig.l2_reg_bern</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMConfig.l2_reg_gamma"><code class="docutils literal notranslate"><span class="pre">GLMHMMConfig.l2_reg_gamma</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMConfig.l2_reg_gauss"><code class="docutils literal notranslate"><span class="pre">GLMHMMConfig.l2_reg_gauss</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMConfig.l2_reg_multinom"><code class="docutils literal notranslate"><span class="pre">GLMHMMConfig.l2_reg_multinom</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMConfig.l2_reg_negbin"><code class="docutils literal notranslate"><span class="pre">GLMHMMConfig.l2_reg_negbin</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMConfig.l2_reg_trans"><code class="docutils literal notranslate"><span class="pre">GLMHMMConfig.l2_reg_trans</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMConfig.num_em_iters"><code class="docutils literal notranslate"><span class="pre">GLMHMMConfig.num_em_iters</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMConfig.num_states"><code class="docutils literal notranslate"><span class="pre">GLMHMMConfig.num_states</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMConfig.tol"><code class="docutils literal notranslate"><span class="pre">GLMHMMConfig.tol</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMData"><code class="docutils literal notranslate"><span class="pre">GLMHMMData</span></code></a><ul>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMData.gauss_first_idx"><code class="docutils literal notranslate"><span class="pre">GLMHMMData.gauss_first_idx</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMData.gauss_last_idx"><code class="docutils literal notranslate"><span class="pre">GLMHMMData.gauss_last_idx</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMData.x_bern"><code class="docutils literal notranslate"><span class="pre">GLMHMMData.x_bern</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMData.x_gamma"><code class="docutils literal notranslate"><span class="pre">GLMHMMData.x_gamma</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMData.x_gauss"><code class="docutils literal notranslate"><span class="pre">GLMHMMData.x_gauss</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMData.x_multinom"><code class="docutils literal notranslate"><span class="pre">GLMHMMData.x_multinom</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMData.x_negbin"><code class="docutils literal notranslate"><span class="pre">GLMHMMData.x_negbin</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMData.x_trans"><code class="docutils literal notranslate"><span class="pre">GLMHMMData.x_trans</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMData.y_bern"><code class="docutils literal notranslate"><span class="pre">GLMHMMData.y_bern</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMData.y_gamma"><code class="docutils literal notranslate"><span class="pre">GLMHMMData.y_gamma</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMData.y_gauss"><code class="docutils literal notranslate"><span class="pre">GLMHMMData.y_gauss</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMData.y_multinom"><code class="docutils literal notranslate"><span class="pre">GLMHMMData.y_multinom</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMData.y_negbin"><code class="docutils literal notranslate"><span class="pre">GLMHMMData.y_negbin</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMParams"><code class="docutils literal notranslate"><span class="pre">GLMHMMParams</span></code></a><ul>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMParams.Sigma_gauss"><code class="docutils literal notranslate"><span class="pre">GLMHMMParams.Sigma_gauss</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMParams.W_bern"><code class="docutils literal notranslate"><span class="pre">GLMHMMParams.W_bern</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMParams.W_gamma"><code class="docutils literal notranslate"><span class="pre">GLMHMMParams.W_gamma</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMParams.W_gauss"><code class="docutils literal notranslate"><span class="pre">GLMHMMParams.W_gauss</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMParams.W_multinom"><code class="docutils literal notranslate"><span class="pre">GLMHMMParams.W_multinom</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMParams.W_negbin"><code class="docutils literal notranslate"><span class="pre">GLMHMMParams.W_negbin</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMParams.alpha_gamma"><code class="docutils literal notranslate"><span class="pre">GLMHMMParams.alpha_gamma</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMParams.log_A"><code class="docutils literal notranslate"><span class="pre">GLMHMMParams.log_A</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMParams.log_pi0"><code class="docutils literal notranslate"><span class="pre">GLMHMMParams.log_pi0</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMParams.phi_negbin"><code class="docutils literal notranslate"><span class="pre">GLMHMMParams.phi_negbin</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.structs.GLMHMMParams.theta"><code class="docutils literal notranslate"><span class="pre">GLMHMMParams.theta</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-glmhmm.emissions">Emissions</a><ul>
+<li><a class="reference internal" href="#glmhmm.emissions.bernoulli_glmhmm_loglikelihood"><code class="docutils literal notranslate"><span class="pre">bernoulli_glmhmm_loglikelihood()</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.emissions.gamma_glmhmm_loglikelihood"><code class="docutils literal notranslate"><span class="pre">gamma_glmhmm_loglikelihood()</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.emissions.gaussian_glmhmm_loglikelihoods"><code class="docutils literal notranslate"><span class="pre">gaussian_glmhmm_loglikelihoods()</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.emissions.multinomial_glmhmm_loglikelihood"><code class="docutils literal notranslate"><span class="pre">multinomial_glmhmm_loglikelihood()</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.emissions.negbin_glmhmm_loglikelihood"><code class="docutils literal notranslate"><span class="pre">negbin_glmhmm_loglikelihood()</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.emissions.normalized_gauss_loglikelihoods"><code class="docutils literal notranslate"><span class="pre">normalized_gauss_loglikelihoods()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-glmhmm.utils">Utilities</a><ul>
+<li><a class="reference internal" href="#glmhmm.utils.compute_A_from_theta_and_inputs"><code class="docutils literal notranslate"><span class="pre">compute_A_from_theta_and_inputs()</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.utils.compute_boundaries"><code class="docutils literal notranslate"><span class="pre">compute_boundaries()</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.utils.find_best_permutation"><code class="docutils literal notranslate"><span class="pre">find_best_permutation()</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.utils.generate_input_driven_inputs"><code class="docutils literal notranslate"><span class="pre">generate_input_driven_inputs()</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.utils.generate_latent_state_sequence"><code class="docutils literal notranslate"><span class="pre">generate_latent_state_sequence()</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.utils.read_pickle"><code class="docutils literal notranslate"><span class="pre">read_pickle()</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.utils.save_pickle"><code class="docutils literal notranslate"><span class="pre">save_pickle()</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.utils.simulate_data_bernoulli_glmhmm"><code class="docutils literal notranslate"><span class="pre">simulate_data_bernoulli_glmhmm()</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.utils.simulate_data_for_glmhmm"><code class="docutils literal notranslate"><span class="pre">simulate_data_for_glmhmm()</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.utils.simulate_hmm_states_input_driven"><code class="docutils literal notranslate"><span class="pre">simulate_hmm_states_input_driven()</span></code></a></li>
+<li><a class="reference internal" href="#glmhmm.utils.transform_theta"><code class="docutils literal notranslate"><span class="pre">transform_theta()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="_static/documentation_options.js?v=01f34227"></script>
+    <script src="_static/doctools.js?v=9bcbadda"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/scripts/furo.js?v=46bd48cc"></script>
+    </body>
+</html>
