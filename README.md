@@ -124,6 +124,8 @@ for k in [2, 3, 4]:
 ## 🛠 Advanced Features
 
 ### Factorized Evidence (Bayesian Quadrature)
+*NOTE:* This works best with continous likelihood models, discrete likelihoods appear to require REALLY LARGE $l^2$ penalties (100 for multinomial for example!). Bernoulli likelihoods seem OK with a modest penalty of 2. 
+
 For rigorous model comparison, use `compute_factorized_evidence` to estimate the marginal likelihood $P(Y)$, integrating over parameter configurations. This is computationally heavier but more accurate than BIC for non-asymptotic regimes.
 
 ```python
