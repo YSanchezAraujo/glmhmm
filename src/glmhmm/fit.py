@@ -263,6 +263,48 @@ def m_step(params: GLMHMMParams, data: GLMHMMData, gammas: List[jnp.ndarray], xi
         Sigma_gauss=new_Sigma_gauss
     )
 
+def _validate_data_shapes(data: GLMHMMData):
+    """
+    Validates that x_trans has length T-1 relative to observations of length T.
+    """
+    if data.x_trans is None:
+        return
+
+    seq_sources = [data.x_bern, data.x_multinom, data.x_negbin, data.x_gamma, data.x_gauss]
+    obs_source = next((s for s in seq_sources if s is not None), None)
+    
+    if obs_source is None:
+        return
+
+    n_sequences = len(obs_source)
+    if len(data.x_trans) != n_sequences:
+        raise ValueError(f"Number of x_trans sequences ({len(data.x_trans)}) does not match number of observation sequences ({n_sequences}).")
+
+    for i in range(n_sequences):
+        if data.x_bern is not None: 
+            T = data.x_bern[i].shape[0]
+        elif data.x_multinom is not None: 
+            T = data.x_multinom[i].shape[0]
+        elif data.x_negbin is not None: 
+            T = data.x_negbin[i].shape[0]
+        elif data.x_gamma is not None: 
+            T = data.x_gamma[i].shape[0]
+        elif data.x_gauss is not None:
+             if data.gauss_first_idx is not None:
+                 T = data.gauss_first_idx[i].shape[0]
+             else:
+                 T = data.x_gauss[i].shape[0]
+        else:
+             continue
+
+        T_trans = data.x_trans[i].shape[0]
+        if T_trans != T - 1:
+            raise ValueError(
+                f"Shape mismatch in sequence {i}: Observations have length T={T}, "
+                f"but x_trans has length {T_trans}. Input-driven transitions operate "
+                f"on the interval t -> t+1, so x_trans must have length T-1."
+            )
+
 def fit_glmhmm(data: GLMHMMData, config: GLMHMMConfig, initial_params: Optional[GLMHMMParams] = None):
     """
     Fits a Generalized Linear Model Hidden Markov Model using the EM algorithm.
@@ -301,6 +343,8 @@ def fit_glmhmm(data: GLMHMMData, config: GLMHMMConfig, initial_params: Optional[
         >>> config = GLMHMMConfig(num_states=3, num_em_iters=100, l2_reg_bern=1.0)
         >>> params, lml_history = fit_glmhmm(data, config)
     """
+    _validate_data_shapes(data)
+
     if initial_params is None:
         params = initialize_params(data, config)
     else:
