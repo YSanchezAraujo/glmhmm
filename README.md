@@ -34,10 +34,12 @@ The core data structure is `GLMHMMData`, which holds lists of arrays. This desig
 
 > **Note**: For Gaussian data, we support "variable rate" alignment where multiple Gaussian samples map to a single HMM state step. See `gauss_first_idx` / `gauss_last_idx` in `test_fit_compatibility.py` for advanced usage. For standard 1-to-1 mapping, these indices are not needed.
 
+> **Note**: The model is written such that the transition inputs operate on the assumption of $t \rightarrow t+1$. This implies that your transition inputs are aligned to the transition step (i.e. they correctly reflect $t \rightarrow t+1$ and so they will be one less than the total number of observations). 
+
 ## 💻 Usage Examples
 
 ### 1. Bernoulli GLM-HMM (Binary Choices)
-Modeling an agent's binary choices (Left/Right) driven by Bias and Stimulus strength.
+Modeling an agent's binary choices (Left/Right) driven by Bias and Stimulus strength. 
 
 ```python
 import jax
@@ -62,7 +64,7 @@ data = GLMHMMData(
     x_bern=[X1, X2], 
     y_bern=[y1, y2],
     # We can also add transition inputs:
-    x_trans=[X1, X2] # Transitions driven by same inputs
+    x_trans=[X1[:-1], X2[:-1]] # Transitions driven by same inputs
 )
 
 # --- 2. Configure ---
