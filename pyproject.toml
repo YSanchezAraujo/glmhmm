@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "A JAX-based implementation of GLM-HMMs for neuroscience data"
 readme = "README.md"
 requires-python = ">=3.9"
-license = {text = "MIT"}
+license = {text = "GPL-3.0"}
 authors = [
   {name = "Yoel Sanchez Araujo", email = "yoelsanchez06@gmail.com"},
 ]
@@ -18,7 +18,8 @@ dependencies = [
     "optax>=0.1.0",
     "tqdm",
     "numpy",
-    "scipy"
+    "scipy",
+    "tinygp"
 ]
 
 [project.urls]
