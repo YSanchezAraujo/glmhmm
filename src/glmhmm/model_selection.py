@@ -10,6 +10,14 @@ from typing import Callable, Tuple, Optional, Any
 from functools import partial
 
 from .structs import GLMHMMData, GLMHMMParams, GLMHMMConfig
+from .fit import compute_log_marginal_likelihood
+from .emissions import (
+    bernoulli_glmhmm_loglikelihood,
+    multinomial_glmhmm_loglikelihood,
+    negbin_glmhmm_loglikelihood,
+    gamma_glmhmm_loglikelihood,
+    gaussian_glmhmm_loglikelihoods
+)
 
 @jit
 def compute_kernel_expectations(
@@ -410,17 +418,60 @@ def compute_factorized_evidence(
              log_Z_glm += lz
              var_log_Z_glm += var_lz
 
-    ent_elements = gammas_flat * jnp.log(gammas_flat + 1e-10)
-    entropy = -jnp.sum(ent_elements)
+
+    log_P_Y = compute_log_marginal_likelihood(params, data)
     
-    if isinstance(xis, list):
-        total_entropy = 0.0
-        for x in xis:
-             ent_x = x * jnp.log(x + 1e-10)
-             total_entropy -= jnp.sum(ent_x)
-        entropy = total_entropy
+    if isinstance(gammas, list):
+         expected_ll_init = sum([jnp.sum(g[0] * params.log_pi0) for g in gammas])
     else:
-        entropy = -jnp.sum(xis * jnp.log(xis + 1e-10))
+         expected_ll_init = jnp.sum(gammas[:, 0, :] * params.log_pi0)
+         
+    if isinstance(xis, list):
+         expected_ll_trans = sum([jnp.sum(x * params.log_A) for x in xis])
+    else:
+         expected_ll_trans = jnp.sum(xis * params.log_A)
+         
+    expected_ll_emit = 0.0
+    
+    if valid_bern:
+        ll_bern = bernoulli_glmhmm_loglikelihood(x_b_flat, y_b_flat, params.W_bern)
+        expected_ll_emit += jnp.sum(gammas_flat * ll_bern)
+        
+    if valid_gauss:
+         total_gauss_ll = 0.0
+         for k in range(K):
+             ll_k = gaussian_glmhmm_loglikelihoods(
+                 x_g_flat, y_g_flat, params.W_gauss[:, :, k], params.Sigma_gauss[:, :, k]
+             )
+             if data.gauss_first_idx is not None:
+                  first_flat = flatten_list(data.gauss_first_idx)
+                  last_flat = flatten_list(data.gauss_last_idx)
+                  counts = last_flat - first_flat
+                  seg_ids = jnp.repeat(jnp.arange(len(counts)), counts)
+                  gs_expanded = gammas_flat[seg_ids, k]
+             else:
+                  gs_expanded = gammas_flat[:, k]
+                  
+             total_gauss_ll += jnp.sum(gs_expanded * ll_k)
+         expected_ll_emit += total_gauss_ll
+         
+    if (params.W_multinom is not None) and (data.x_multinom is not None):
+        # W_multinom is (F, C, K)
+        ll_unweighted = multinomial_glmhmm_loglikelihood(flatten_list(data.x_multinom), flatten_list(data.y_multinom), params.W_multinom)
+        # ll_unweighted is (N, K)
+        expected_ll_emit += jnp.sum(gammas_flat * ll_unweighted)
+        
+    if (params.W_negbin is not None) and (data.x_negbin is not None):
+        ll_nb = negbin_glmhmm_loglikelihood(flatten_list(data.x_negbin), flatten_list(data.y_negbin), params.W_negbin, params.phi_negbin)
+        expected_ll_emit += jnp.sum(gammas_flat * ll_nb)
+        
+    if (params.W_gamma is not None) and (data.x_gamma is not None):
+        ll_gm = gamma_glmhmm_loglikelihood(flatten_list(data.x_gamma), flatten_list(data.y_gamma), params.W_gamma, params.alpha_gamma)
+        expected_ll_emit += jnp.sum(gammas_flat * ll_gm)
+
+    expected_complete_ll = expected_ll_init + expected_ll_trans + expected_ll_emit
+    
+    entropy = log_P_Y - expected_complete_ll
 
     total_log_Z = log_Z_trans + log_Z_glm + entropy
     total_var = var_log_Z_trans + var_log_Z_glm

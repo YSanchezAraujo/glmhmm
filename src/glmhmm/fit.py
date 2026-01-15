@@ -83,6 +83,77 @@ def compute_total_emissions(params: GLMHMMParams, x_b, y_b, x_mn, y_mn, x_nb, y_
     
     return ll_total
 
+def compute_log_marginal_likelihood(params: GLMHMMParams, data: GLMHMMData) -> float:
+    """
+    Computes the total log marginal likelihood of the data given the parameters.
+    Sum of log_c from the forward pass across all sequences.
+    """
+    total_lml = 0.0
+    
+    seq_sources = [data.x_trans, data.x_bern, data.x_multinom, data.x_negbin, data.x_gamma]
+    # Handle list of lists for x_gauss if necessary, essentially finding n_sequences
+    if data.x_gauss is not None:
+         if isinstance(data.x_gauss, list) and len(data.x_gauss) > 0:
+             n_sequences = len(data.x_gauss)
+         else:
+             # Fallback or empty
+             n_sequences = 0
+             # Check other sources
+             if n_sequences == 0:
+                  n_sequences = next((len(s) for s in seq_sources if s is not None), 0)
+    else:
+        n_sequences = next((len(s) for s in seq_sources if s is not None), 0)
+
+    for i in range(n_sequences): 
+        x_b  = data.x_bern[i] if data.x_bern is not None else None
+        y_b  = data.y_bern[i] if data.y_bern is not None else None
+        x_mn = data.x_multinom[i] if data.x_multinom is not None else None
+        y_mn = data.y_multinom[i] if data.y_multinom is not None else None
+        x_nb = data.x_negbin[i] if data.x_negbin is not None else None
+        y_nb = data.y_negbin[i] if data.y_negbin is not None else None
+        x_gm  = data.x_gamma[i] if data.x_gamma is not None else None
+        y_gm  = data.y_gamma[i] if data.y_gamma is not None else None
+        
+        if data.x_gauss is not None and isinstance(data.x_gauss, list):
+             if isinstance(data.x_gauss[i], (list, tuple)):
+                 x_gs = jnp.concatenate(data.x_gauss[i], axis=0)
+                 y_gs = jnp.concatenate(data.y_gauss[i], axis=0)
+             else:
+                 x_gs = data.x_gauss[i]
+                 y_gs = data.y_gauss[i]
+        else:
+             x_gs, y_gs = None, None
+
+        gs_first = data.gauss_first_idx[i] if data.gauss_first_idx else None
+        gs_last = data.gauss_last_idx[i] if data.gauss_last_idx else None
+        
+        gs_segment_ids = None
+        if gs_first is not None:
+            n_segs = gs_first.shape[0]
+            lengths = gs_last - gs_first
+            gs_segment_ids = jnp.repeat(jnp.arange(n_segs), lengths)
+
+        ll_t = compute_total_emissions(params, x_b, y_b, x_mn, y_mn, x_nb, y_nb, x_gm, y_gm, x_gs, y_gs, gs_first, gs_last, gs_segment_ids)
+        
+        if params.theta is not None:
+            data_x_trans_i = data.x_trans[i] if data.x_trans is not None else None
+            if data_x_trans_i is None:
+                 # Should not happen if params.theta is input driven
+                 raise ValueError("params.theta is present but data.x_trans is None")
+            A_t = compute_A_from_theta_and_inputs(data_x_trans_i, params.theta)
+            log_A_t = jnp.log(A_t)
+        else:
+            T_len = ll_t.shape[0]
+            K = params.log_A.shape[0]
+            log_A_t = jnp.broadcast_to(params.log_A[jnp.newaxis, :, :], (T_len, K, K))
+            
+        _, log_c = compute_log_forward_message(ll_t, params.log_pi0, log_A_t)
+        
+        total_lml += jnp.sum(log_c)
+
+    return total_lml
+
+
 def e_step(params: GLMHMMParams, data: GLMHMMData):
     """
     Performs the E-step of the EM algorithm for GLMHMM.
@@ -104,8 +175,12 @@ def e_step(params: GLMHMMParams, data: GLMHMMData):
     total_lml = 0.0
     gammas, xis = [], []
     
-    seq_sources = [data.x_trans, data.x_bern, data.x_multinom, data.x_negbin, data.x_gamma, data.x_gauss]
-    n_sequences = next(len(s) for s in seq_sources if s is not None)
+    seq_sources = [data.x_trans, data.x_bern, data.x_multinom, data.x_negbin, data.x_gamma]
+    # Helper to get n_sequences robustly
+    if data.x_gauss is not None and isinstance(data.x_gauss, list) and len(data.x_gauss) > 0:
+          n_sequences = len(data.x_gauss)
+    else:
+          n_sequences = next((len(s) for s in seq_sources if s is not None), 0)
 
     for i in range(n_sequences): 
         x_b  = data.x_bern[i] if data.x_bern is not None else None
@@ -116,7 +191,8 @@ def e_step(params: GLMHMMParams, data: GLMHMMData):
         y_nb = data.y_negbin[i] if data.y_negbin is not None else None
         x_gm  = data.x_gamma[i] if data.x_gamma is not None else None
         y_gm  = data.y_gamma[i] if data.y_gamma is not None else None
-        if data.x_gauss is not None:
+        
+        if data.x_gauss is not None and isinstance(data.x_gauss, list):
              if isinstance(data.x_gauss[i], (list, tuple)):
                  x_gs = jnp.concatenate(data.x_gauss[i], axis=0)
                  y_gs = jnp.concatenate(data.y_gauss[i], axis=0)
@@ -125,6 +201,7 @@ def e_step(params: GLMHMMParams, data: GLMHMMData):
                  y_gs = data.y_gauss[i]
         else:
              x_gs, y_gs = None, None
+
         gs_first = data.gauss_first_idx[i] if data.gauss_first_idx else None
         gs_last = data.gauss_last_idx[i] if data.gauss_last_idx else None
         
@@ -137,12 +214,13 @@ def e_step(params: GLMHMMParams, data: GLMHMMData):
         ll_t = compute_total_emissions(params, x_b, y_b, x_mn, y_mn, x_nb, y_nb, x_gm, y_gm, x_gs, y_gs, gs_first, gs_last, gs_segment_ids)
         
         if params.theta is not None:
-            A_t = compute_A_from_theta_and_inputs(data.x_trans[i], params.theta)
+            data_x_trans_i = data.x_trans[i] if data.x_trans is not None else None
+            A_t = compute_A_from_theta_and_inputs(data_x_trans_i, params.theta)
             log_A_t = jnp.log(A_t)
         else:
-            T = ll_t.shape[0]
+            T_len = ll_t.shape[0]
             K = params.log_A.shape[0]
-            log_A_t = jnp.broadcast_to(params.log_A[jnp.newaxis, :, :], (T, K, K))
+            log_A_t = jnp.broadcast_to(params.log_A[jnp.newaxis, :, :], (T_len, K, K))
             
         log_alpha, log_c = compute_log_forward_message(ll_t, params.log_pi0, log_A_t)
         log_beta = compute_log_backward_message(ll_t, log_A_t, log_c)
