@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+._*
+
+# Python
+__pycache__/
+*.egg-info/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
