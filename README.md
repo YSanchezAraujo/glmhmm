@@ -87,10 +87,10 @@ print(f"Converged LML: {lml_history[-1]}")
 print("Bernoulli Weights (D x K):")
 print(params.W_bern)
 
-# get the posteriors
+# Get the posteriors
 gammas, xis, final_lml = e_step(params, data)
 
-# compute the transition matrix
+# Compute the input-driven transition matrix
 A_timevar = compute_A_from_theta_and_inputs(x_trans_concat, params.theta)
 ```
 

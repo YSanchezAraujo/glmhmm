@@ -362,5 +362,8 @@ def fit_glmhmm(data: GLMHMMData, config: GLMHMMConfig, initial_params: Optional[
         lml_history.append(lml)
         
         params = m_step(params, data, gammas, xis, config)
+    
+    if params.theta is not None:
+        params = params._replace(log_A=None)
         
     return params, lml_history
