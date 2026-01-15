@@ -46,41 +46,52 @@ import jax
 import jax.numpy as jnp
 from glmhmm import fit_glmhmm
 from glmhmm.structs import GLMHMMData, GLMHMMConfig
+from glmhmm.utils import simulate_data_bernoulli_glmhmm
+from glmhmm.m_step import compute_A_from_theta_and_inputs
+from glmhmm.fit import e_step
 
-# --- 1. Prepare Data ---
-# Suppose we have 2 sessions.
-# Session 1: 500 trials
-T1 = 500
-X1 = jnp.zeros((T1, 2)) # [Bias=1, Stimulus]
-y1 = jnp.zeros(T1)      # Choices
+key = jax.random.PRNGKey(42)
+N_states = 3
+T = 1000
+N_bern_features = 2
+N_trans_features = 2
 
-# Session 2: 400 trials
-T2 = 400
-X2 = jnp.zeros((T2, 2))
-y2 = jnp.zeros(T2)
+# Generate synthetic data
+true_params, sim_data = simulate_data_bernoulli_glmhmm(
+    key, N_states, T, N_bern_features, N_trans_features
+)
 
-# Wrap in lists
+# Unwrap simulated data for GLMHMMData
+# x_inputs from utils is a list of arrays (one per step), so we concatenate 
+# to get a single array of shape (T-1, D) for the session.
+x_trans_concat = jnp.concatenate(sim_data.x_inputs, axis=0)
+
 data = GLMHMMData(
-    x_bern=[X1, X2], 
-    y_bern=[y1, y2],
-    # We can also add transition inputs:
-    x_trans=[X1[:-1], X2[:-1]] # Transitions driven by same inputs
+    x_bern=[sim_data.x_bern], 
+    y_bern=[sim_data.y_bern],
+    x_trans=[x_trans_concat] # Transitions driven by inputs (length T-1)
 )
 
-# --- 2. Configure ---
 config = GLMHMMConfig(
-    num_states=3,
+    num_states=N_states,
     num_em_iters=100,
-    l2_reg_bern=1.0,   # Regularization for emission weights
-    l2_reg_trans=0.5   # Regularization for transition weights
+    l2_reg_bern=1.0,    # Regularization for emission weights
+    l2_reg_trans=0.5 ,  # Regularization for transition weights
+    tol = 1e-6
 )
 
-# --- 3. Fit ---
+
 params, lml_history = fit_glmhmm(data, config)
 
 print(f"Converged LML: {lml_history[-1]}")
 print("Bernoulli Weights (D x K):")
 print(params.W_bern)
+
+# get the posteriors
+gammas, xis, final_lml = e_step(params, data)
+
+# compute the transition matrix
+A_timevar = compute_A_from_theta_and_inputs(x_trans_concat, params.theta)
 ```
 
 ### 2. Multinomial GLM-HMM (Categorical Choices)
@@ -126,7 +137,7 @@ for k in [2, 3, 4]:
 ## 🛠 Advanced Features
 
 ### Factorized Evidence (Bayesian Quadrature)
-*NOTE:* This works best with continous likelihood models, discrete likelihoods appear to require REALLY LARGE $l^2$ penalties (100 for multinomial for example!). Bernoulli likelihoods seem OK with a modest penalty of 2. 
+> **Note**: This is still under construction but for the moment has basic functionality. Also, this works best with continous likelihood models, discrete likelihoods appear to require REALLY LARGE $l^2$ penalties (100 for multinomial for example!). Bernoulli likelihoods seem OK with a modest penalty of 2. 
 
 For rigorous model comparison, use `compute_factorized_evidence` to estimate the marginal likelihood $P(Y)$, integrating over parameter configurations. This is computationally heavier but more accurate than BIC for non-asymptotic regimes.
 

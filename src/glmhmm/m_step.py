@@ -278,8 +278,6 @@ def negbin_m_step_optax(
     num_opt_steps: int = 2000
 ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]: 
     
-    
-
     optimizer = vmap(
         run_opt_negbin, in_axes=(0, 0, None, None, 0, None, None, None) 
     )
