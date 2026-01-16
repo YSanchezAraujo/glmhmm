@@ -21,7 +21,14 @@ from .utils import compute_A_from_theta_and_inputs
 from .initialize import initialize_params
 
 @jit
-def compute_total_emissions(params: GLMHMMParams, x_b, y_b, x_mn, y_mn, x_nb, y_nb, x_gm, y_gm, x_gs, y_gs, gs_first, gs_last, gs_segment_ids) -> jnp.ndarray:
+def compute_total_emissions(
+    params: GLMHMMParams, 
+    x_b, y_b, 
+    x_mn, y_mn, 
+    x_nb, y_nb, 
+    x_gm, y_gm, 
+    x_gs, y_gs, gs_first, gs_last, gs_segment_ids
+    ) -> jnp.ndarray:
     """
     Computes total log-likelihoods by summing across all active emission distributions.
     """
@@ -232,7 +239,13 @@ def e_step(params: GLMHMMParams, data: GLMHMMData):
         
     return gammas, xis, total_lml
 
-def m_step(params: GLMHMMParams, data: GLMHMMData, gammas: List[jnp.ndarray], xis: List[jnp.ndarray], config: GLMHMMConfig) -> GLMHMMParams:
+def m_step(
+    params: GLMHMMParams, 
+    data: GLMHMMData, 
+    gammas: List[jnp.ndarray], 
+    xis: List[jnp.ndarray], 
+    config: GLMHMMConfig
+    ) -> GLMHMMParams:
     """
     Performs the M-step of the EM algorithm for GLMHMM.
     
@@ -383,7 +396,11 @@ def _validate_data_shapes(data: GLMHMMData):
                 f"on the interval t -> t+1, so x_trans must have length T-1."
             )
 
-def fit_glmhmm(data: GLMHMMData, config: GLMHMMConfig, initial_params: Optional[GLMHMMParams] = None):
+def fit_glmhmm(
+    data: GLMHMMData, 
+    config: GLMHMMConfig, 
+    initial_params: Optional[GLMHMMParams] = None
+    ):
     """
     Fits a Generalized Linear Model Hidden Markov Model using the EM algorithm.
     
@@ -434,7 +451,7 @@ def fit_glmhmm(data: GLMHMMData, config: GLMHMMConfig, initial_params: Optional[
 
         gammas, xis, lml = e_step(params, data)
         
-        if epoch > 0 and abs(lml - lml_history[-1]) < config.tol:
+        if epoch > config.min_em_iters and abs(lml - lml_history[-1]) < config.tol:
             print(f"Converged at epoch {epoch}")
             break
         lml_history.append(lml)

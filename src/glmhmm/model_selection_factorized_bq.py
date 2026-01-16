@@ -103,7 +103,7 @@ def run_bq_tinygp(
     log_prob_fn: Callable[[jnp.ndarray], float],
     center: jnp.ndarray,
     dim: int,
-    n_samples: int = 150, # Boosted samples
+    n_samples: int = 150,
     key: Optional[random.PRNGKey] = None,
     lengthscale_init: float = 1.0
 ) -> float:
@@ -122,7 +122,7 @@ def run_bq_tinygp(
     key, subkey = random.split(key)
     L_chol = jnp.linalg.cholesky(Sigma_laplace)
     z = random.normal(subkey, (n_samples, dim))
-    samples = center + z @ L_chol.T # (N, D)
+    samples = center + z @ L_chol.T
     
     def get_log_q(theta):
         d = theta - center
@@ -188,6 +188,16 @@ def compute_factorized_evidence(
     log Z = log Z_trans + sum_k log Z_glm_k
     Returns: (log_evidence, var_log_evidence)
     """
+    def flatten_list(l):
+        if l is None: return None
+        if not l: return None
+        if isinstance(l[0], list):
+             flat_items = []
+             for sublist in l:
+                 flat_items.extend(sublist)
+             return jnp.concatenate(flat_items, axis=0)
+        return jnp.concatenate(l, axis=0)
+    
     if key is None: 
         key = random.PRNGKey(0)
     
@@ -213,30 +223,66 @@ def compute_factorized_evidence(
             return ll + prior + log_prior_const
         return _lp
 
-    logit_A_full = params.log_A
+    logit_trans_evidence = 0.0
+    var_logit_trans_evidence = 0.0
     
-    for j in range(K):
-        key, subkey = random.split(key)
-        center_j = logit_A_full[j]
-        lp_fn = make_log_prob_trans_row(counts_trans[j])
-        
-        lz, var_lz = run_bq_tinygp(lp_fn, center_j, dim=K, key=subkey)
-        log_Z_trans += lz
-        var_log_Z_trans += var_lz
+    if data.x_trans is not None:
+         logit_theta_full = params.theta # (D, K, K)
+         
+         x_trans_flat = flatten_list(data.x_trans)
+         if isinstance(xis, list):
+             x_trans_inputs = jnp.concatenate([x for x in data.x_trans], axis=0) # (N, D)
+             xis_flat = jnp.concatenate(xis, axis=0) # (N, K, K)
+         else:
+             x_trans_inputs = data.x_trans.reshape(-1, data.x_trans.shape[-1])
+             xis_flat = xis.reshape(-1, K, K)
+             
+         D_trans = x_trans_inputs.shape[1]
+         
+         for j in range(K):
+             key, subkey = random.split(key)
+             center_j_full = logit_theta_full[:, j, :] # (D, K)
+             center_j_reduced = center_j_full[:, :-1]  # (D, K-1)
+             center_j = center_j_reduced.flatten()     # (D * (K-1),)
+             
+             targets_j = xis_flat[:, j, :] # (N, K)
+             
+             def lp_theta(theta_flat):
+                 Theta_reduced = theta_flat.reshape(D_trans, K-1)
+                 zeros = jnp.zeros((D_trans, 1))
+                 Theta_j = jnp.concatenate([Theta_reduced, zeros], axis=1) # (D, K)
+                 
+                 logits = x_trans_inputs @ Theta_j
+                 log_probs = jax.nn.log_softmax(logits)
+                 ll = jnp.sum(targets_j * log_probs)
+                 
+                 dim_t = theta_flat.shape[0]
+                 log_prior_const = 0.5 * dim_t * (jnp.log(config.l2_reg_trans) - jnp.log(2 * jnp.pi))
+                 prior = -0.5 * config.l2_reg_trans * jnp.sum(theta_flat**2)
+                 
+                 return ll + prior + log_prior_const
+                 
+             lz, var_lz = run_bq_tinygp(lp_theta, center_j, dim=D_trans*(K-1), key=subkey)
+             logit_trans_evidence += lz
+             var_logit_trans_evidence += var_lz
+             
+    else:
+        logit_A_full = params.log_A
+        for j in range(K):
+            key, subkey = random.split(key)
+            center_j = logit_A_full[j]
+            lp_fn = make_log_prob_trans_row(counts_trans[j])
+            
+            lz, var_lz = run_bq_tinygp(lp_fn, center_j, dim=K, key=subkey)
+            logit_trans_evidence += lz
+            var_logit_trans_evidence += var_lz
+            
+    log_Z_trans = logit_trans_evidence
+    var_log_Z_trans = var_logit_trans_evidence
         
     log_Z_glm = 0.0
     var_log_Z_glm = 0.0
     
-    def flatten_list(l):
-        if l is None: return None
-        if not l: return None
-        if isinstance(l[0], list):
-             flat_items = []
-             for sublist in l:
-                 flat_items.extend(sublist)
-             return jnp.concatenate(flat_items, axis=0)
-        return jnp.concatenate(l, axis=0)
-
     gammas_flat = flatten_list(gammas)
     x_b_flat = flatten_list(data.x_bern)
     y_b_flat = flatten_list(data.y_bern)
@@ -290,7 +336,7 @@ def compute_factorized_evidence(
                 mu = x_g_flat @ W 
                 diff = y_g_flat - mu
                 
-                quad = jnp.sum((diff @ Prec_k) * diff, axis=1) # (N_samples,)
+                quad = jnp.sum((diff @ Prec_k) * diff, axis=1)
                 ll_point = -0.5 * quad - 0.5 * M_out * jnp.log(2*jnp.pi) + 0.5 * jnp.linalg.slogdet(Prec_k)[1]
                 
                 D_w = w_flat.shape[0] 
@@ -307,10 +353,10 @@ def compute_factorized_evidence(
              x_m_flat = flatten_list(data.x_multinom)
              y_m_flat = flatten_list(data.y_multinom)
              
-             center_full = params.W_multinom[:, :, k] # (D, C)
+             center_full = params.W_multinom[:, :, k]
              D_mn, C_mn = center_full.shape
              
-             center_reduced = center_full[:, :-1] # (D, C-1)
+             center_reduced = center_full[:, :-1]
              w_flat_center = center_reduced.reshape(-1)   
              gs = gammas_flat[:, k]
              y_m_onehot = jax.nn.one_hot(y_m_flat, C_mn)
@@ -349,18 +395,13 @@ def compute_factorized_evidence(
                  w = theta[:-1]
                  log_phi = theta[-1]
                  phi = jnp.exp(log_phi)
-                 
                  mu = jnp.exp(x_nb_flat @ w)
-                 
-                 # Log Likelihood of NegBin(y | mu, phi)
-                 # Gamma(y + phi) / (Gamma(y+1)Gamma(phi)) * (mu/(mu+phi))^y * (phi/(mu+phi))^phi
-                 # log LL = gammaln(y+phi) - gammaln(y+1) - gammaln(phi) + y*log(mu) + phi*log(phi) - (y+phi)*log(mu+phi)
                  
                  t1 = jax.scipy.special.gammaln(y_nb_flat + phi)
                  t2 = -jax.scipy.special.gammaln(y_nb_flat + 1.0)
                  t3 = -jax.scipy.special.gammaln(phi)
                  t4 = y_nb_flat * jnp.log(mu + 1e-10)
-                 t5 = phi * log_phi # phi * log(phi)
+                 t5 = phi * log_phi
                  t6 = -(y_nb_flat + phi) * jnp.log(mu + phi + 1e-10)
                  
                  ll_point = t1 + t2 + t3 + t4 + t5 + t6
@@ -381,7 +422,6 @@ def compute_factorized_evidence(
              x_gm_flat = flatten_list(data.x_gamma)
              y_gm_flat = flatten_list(data.y_gamma)
              
-             # W (D,), alpha (scalar)
              w_center = params.W_gamma[:, k]
              alpha_center = params.alpha_gamma[k]
              
@@ -409,7 +449,6 @@ def compute_factorized_evidence(
                  D_w = w.shape[0]
                  log_prior_const_w = 0.5 * D_w * (jnp.log(reg) - jnp.log(2 * jnp.pi))
                  log_prior_w = -0.5 * reg * jnp.sum(w**2)
-                 
                  log_prior_alpha = -0.5 * 1.0 * (log_alpha**2)
                  
                  return jnp.sum(gs * ll_point) + log_prior_w + log_prior_const_w + log_prior_alpha
@@ -426,7 +465,21 @@ def compute_factorized_evidence(
     else:
          expected_ll_init = jnp.sum(gammas[:, 0, :] * params.log_pi0)
          
-    if isinstance(xis, list):
+    if data.x_trans is not None and params.theta is not None:
+         expected_ll_trans = 0.0
+         if isinstance(xis, list):
+             for i, x_seq in enumerate(data.x_trans):
+                 x_in = x_seq # (T-1, D)
+                 logits_t = jnp.tensordot(x_in, params.theta, axes=(1, 0))
+                 log_A_t = jax.nn.log_softmax(logits_t, axis=-1)
+                 expected_ll_trans += jnp.sum(xis[i] * log_A_t)
+         else:
+             x_in = data.x_trans
+             logits_t = jnp.tensordot(x_in, params.theta, axes=(2, 0)) # (N, T-1, D) @ (D, K, K) -> (N, T-1, K, K)
+             log_A_t = jax.nn.log_softmax(logits_t, axis=-1)
+             expected_ll_trans = jnp.sum(xis * log_A_t)
+
+    elif isinstance(xis, list):
          expected_ll_trans = sum([jnp.sum(x * params.log_A) for x in xis])
     else:
          expected_ll_trans = jnp.sum(xis * params.log_A)

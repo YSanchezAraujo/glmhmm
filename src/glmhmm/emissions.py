@@ -180,5 +180,3 @@ def normalized_gauss_loglikelihoods(
         return norm_ll / n_regions
     else:
         return segment_sums
-
-

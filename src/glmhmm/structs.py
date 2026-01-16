@@ -4,6 +4,7 @@ from typing import NamedTuple, Optional
 class GLMHMMConfig(NamedTuple):
     num_states: int
     num_em_iters: int
+    min_em_iters: int = 0
     tol: float = 1e-3
     l2_reg_bern: float = 1.0
     l2_reg_multinom: float = 1.0

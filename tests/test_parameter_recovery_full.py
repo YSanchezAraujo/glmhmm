@@ -178,11 +178,7 @@ def run_recovery_test(transition_type="input_driven"):
     from glmhmm.initialize import initialize_params
     init_params = initialize_params(data_struct, config, seed=42)
     
-    if init_params.W_multinom is not None:
-        key_init = random.PRNGKey(99)
-        # Increase scale to 1.0 for Multinomial to break symmetry
-        noisy_W = 1.0 * random.normal(key_init, init_params.W_multinom.shape)
-        init_params = init_params._replace(W_multinom=noisy_W)
+    # init_params.W_multinom is now smart-initialized (K-Means), so we keep it.
         
     fit_params, lml_history = fit_glmhmm(data_struct, config, initial_params=init_params)
     

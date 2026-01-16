@@ -14,7 +14,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
 from glmhmm.structs import GLMHMMData, GLMHMMConfig, GLMHMMParams
 from glmhmm.fit import fit_glmhmm
 from glmhmm.utils import simulate_data_for_glmhmm
-from glmhmm.model_selection import compute_factorized_evidence
+from glmhmm.model_selection_factorized_bq import compute_factorized_evidence
 from glmhmm.initialize import initialize_params
 from glmhmm.fit import e_step
 

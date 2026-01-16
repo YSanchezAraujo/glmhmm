@@ -19,7 +19,8 @@ dependencies = [
     "tqdm",
     "numpy",
     "scipy",
-    "tinygp"
+    "tinygp",
+    "blackjax"
 ]
 
 [project.urls]

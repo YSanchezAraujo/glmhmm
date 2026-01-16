@@ -123,7 +123,7 @@ print(params.W_multinom.shape)
 Compare models with different number of states.
 
 ```python
-from glmhmm.model_selection import compute_bic
+from glmhmm.model_selection_factorized_bq import compute_bic
 
 for k in [2, 3, 4]:
     cfg = GLMHMMConfig(num_states=k, num_em_iters=100)
@@ -143,7 +143,7 @@ For rigorous model comparison, use `compute_factorized_evidence` to estimate the
 
 ```python
 from glmhmm.fit import e_step
-from glmhmm.model_selection import compute_factorized_evidence
+from glmhmm.model_selection_factorized_bq import compute_factorized_evidence
 
 # 1. Get posteriors from fitted model
 gammas, xis, _ = e_step(params, data)
