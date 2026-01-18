@@ -462,3 +462,62 @@ def fit_glmhmm(
         params = params._replace(log_A=None)
         
     return params, lml_history
+
+def fit_with_restarts(
+    data: GLMHMMData, 
+    config: GLMHMMConfig, 
+    n_fits: int = 5, 
+    seeds: Optional[List[int]] = None
+    ) -> Tuple[GLMHMMParams, List[float]]:
+    """
+    Runs fit_glmhmm multiple times with different random seeds and returns the best fit.
+    
+    Args:
+        data: GLMHMMData object.
+        config: GLMHMMConfig object.
+        n_fits: Number of independent fits to run.
+        seeds: Optional list of seeds. If None, generated randomly.
+    
+    Returns:
+        best_params: Parameters achieving the highest LML.
+        best_lml_hist: LML history of the best fit.
+    """
+    import numpy as np
+    
+    if seeds is None:
+        rng = np.random.default_rng(config.seed)
+        seeds = rng.integers(0, 100000, size=n_fits).tolist()
+    
+    if len(seeds) != n_fits:
+        raise ValueError(f"Length of seeds ({len(seeds)}) must match n_fits ({n_fits})")
+        
+    best_lml = -np.inf
+    best_params = None
+    best_hist = None
+    
+    print(f"Running {n_fits} fits with restarts...")
+    
+    for i, seed in enumerate(seeds):
+        print(f"Fit {i+1}/{n_fits} (Seed: {seed})...")
+        current_config = config._replace(seed=seed)
+        
+        try:
+            params, lml_hist = fit_glmhmm(data, current_config)
+            final_lml = lml_hist[-1]
+            
+            if final_lml > best_lml:
+                best_lml = final_lml
+                best_params = params
+                best_hist = lml_hist
+                print(f"New best LML: {best_lml:.4f}")
+            else:
+                print(f"LML: {final_lml:.4f} (Best: {best_lml:.4f})")
+                
+        except Exception as e:
+            print(f"Fit failed with error: {e}")
+            
+    if best_params is None:
+        raise RuntimeError("All fits failed.")
+        
+    print(f"Best LML achieved: {best_lml:.4f}")
+    return best_params, best_hist
