@@ -18,6 +18,18 @@ Initialization
    :undoc-members:
    :show-inheritance:
 
+Model Selection & Evidence Estimation
+-------------------------------------
+.. automodule:: glmhmm.model_selection_factorized_bq
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: glmhmm.model_selection_factorized_smc
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Data Structures
 ---------------
 .. automodule:: glmhmm.structs
@@ -35,6 +47,13 @@ Emissions
 Utilities
 ---------
 .. automodule:: glmhmm.utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+M-Step
+------
+.. automodule:: glmhmm.m_step
    :members:
    :undoc-members:
    :show-inheritance:

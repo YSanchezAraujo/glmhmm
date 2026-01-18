@@ -15,7 +15,7 @@ The core data structure is `GLMHMMData`, which holds lists of arrays. This desig
 ### Structure Rules
 1.  **Lists of Arrays**: All fields are `List[jnp.ndarray]`, where each element corresponds to one sequence (session).
 2.  **Matching Lengths**: For a given sequence $i$, all active fields (transition inputs, emission inputs, observations) must have compatible time dimensions $T_i$.
-3.  **Missing Data**: If you don't have data for a specific modality (e.g., no Gaussian data), pass `None`.
+3.  **Missing Data**: If you don't have data for a specific modality (e.g., no Gaussian data), it will default to `None` and will be ignored during fitting.
 
 ### Fields
 | Field | Shape per Sequence | Description |
@@ -137,8 +137,6 @@ for k in [2, 3, 4]:
 ## 🛠 Advanced Features
 
 ### Factorized Evidence (Bayesian Quadrature)
-> **Note**: This is still under construction but for the moment has basic functionality. 
-
 For rigorous model comparison, use `compute_factorized_evidence` to estimate the marginal likelihood $P(Y)$, integrating over parameter configurations. This is computationally heavier but more accurate than BIC for non-asymptotic regimes.
 
 ```python

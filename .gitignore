@@ -12,3 +12,5 @@ __pycache__/
 *.swp
 *.swo
 
+# Other directories
+analysis/

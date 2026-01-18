@@ -21,4 +21,4 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 html_theme = 'furo'
 html_static_path = ['_static']
 
-autodoc_mock_imports = ["jax", "numpy", "matplotlib", "seaborn", "optax"]
+autodoc_mock_imports = ["jax", "numpy", "matplotlib", "seaborn", "optax", "tinygp", "blackjax"]

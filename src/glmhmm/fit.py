@@ -441,7 +441,7 @@ def fit_glmhmm(
     _validate_data_shapes(data)
 
     if initial_params is None:
-        params = initialize_params(data, config)
+        params = initialize_params(data, config, seed=config.seed)
     else:
         params = initial_params
     lml_history = []
