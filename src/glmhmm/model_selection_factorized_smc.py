@@ -92,14 +92,22 @@ def compute_factorized_evidence_smc(
     K = config.num_states
     
     def flatten_list(l):
-        if l is None: return None
-        if not l: return None
-        if isinstance(l[0], list):
-             flat_items = []
-             for sublist in l:
-                 flat_items.extend(sublist)
-             return jnp.concatenate(flat_items, axis=0)
-        return jnp.concatenate(l, axis=0)
+        if l is None: 
+            return None
+        if isinstance(l, (list, tuple)):
+            if len(l) == 0: 
+                return None
+            if isinstance(l[0], list):
+                 flat_items = []
+                 for sublist in l:
+                     flat_items.extend(sublist)
+                 return jnp.concatenate(flat_items, axis=0)
+            return jnp.concatenate(l, axis=0)
+        
+        if hasattr(l, 'shape'):
+             return jnp.concatenate(l, axis=0)
+             
+        return None
 
     gammas_flat = flatten_list(gammas)
     
@@ -335,10 +343,6 @@ def compute_factorized_evidence_smc(
          expected_ll_init = jnp.sum(gammas[:, 0, :] * params.log_pi0)
 
     if data.x_trans is not None and params.theta is not None:
-         # Recompute log_A_t for input driven
-         # params.theta is (D, K, K)
-         # x_trans is list of (T, D)
-         
          expected_ll_trans = 0.0
          if isinstance(xis, list):
              for i, x_seq in enumerate(data.x_trans):

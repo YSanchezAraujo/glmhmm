@@ -13,6 +13,7 @@ class GLMHMMConfig(NamedTuple):
     l2_reg_trans: float = 1.0
     l2_reg_gauss: float = 1.0
     seed: int = 0
+    init_noise_scale: float = 0.1
 
 class GLMHMMParams(NamedTuple):
     # transitions

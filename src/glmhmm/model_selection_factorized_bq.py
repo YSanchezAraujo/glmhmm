@@ -189,14 +189,22 @@ def compute_factorized_evidence(
     Returns: (log_evidence, var_log_evidence)
     """
     def flatten_list(l):
-        if l is None: return None
-        if not l: return None
-        if isinstance(l[0], list):
-             flat_items = []
-             for sublist in l:
-                 flat_items.extend(sublist)
-             return jnp.concatenate(flat_items, axis=0)
-        return jnp.concatenate(l, axis=0)
+        if l is None: 
+            return None
+        if isinstance(l, (list, tuple)):
+            if len(l) == 0: 
+                return None
+            if isinstance(l[0], list):
+                 flat_items = []
+                 for sublist in l:
+                     flat_items.extend(sublist)
+                 return jnp.concatenate(flat_items, axis=0)
+            return jnp.concatenate(l, axis=0)
+        
+        if hasattr(l, 'shape'):
+             return jnp.concatenate(l, axis=0)
+             
+        return None
     
     if key is None: 
         key = random.PRNGKey(0)
@@ -531,71 +539,5 @@ def compute_factorized_evidence(
     
     return total_log_Z, total_var
 
-def compute_bic(
-    data: GLMHMMData,
-    params: GLMHMMParams,
-    max_log_lik: float
-) -> float:
-    """
-    Computes the Bayesian Information Criterion (BIC) for the fitted model.
-    BIC = k * ln(n) - 2 * ln(L)
-    
-    where:
-    k = number of free parameters
-    n = number of observations (total time steps)
-    L = maximized log-likelihood
-    
-    Args:
-        data: GLMHMMData object
-        params: Fitted GLMHMMParams object
-        max_log_lik: Log-likelihood of the data at the fitted parameters
-        
-    Returns:
-        bic: The BIC value (lower is better)
-    """
-    
-    n_obs = 0
-    if data.x_trans is not None:
-         n_obs = sum(x.shape[0] for x in data.x_trans) if isinstance(data.x_trans, list) else data.x_trans.shape[0]
-    elif data.x_bern is not None:
-         n_obs = sum(x.shape[0] for x in data.x_bern) if isinstance(data.x_bern, list) else data.x_bern.shape[0]
-    elif data.x_multinom is not None:
-         n_obs = sum(x.shape[0] for x in data.x_multinom) if isinstance(data.x_multinom, list) else data.x_multinom.shape[0]
-    elif data.x_negbin is not None:
-         n_obs = sum(x.shape[0] for x in data.x_negbin) if isinstance(data.x_negbin, list) else data.x_negbin.shape[0]
-    elif data.x_gamma is not None:
-         n_obs = sum(x.shape[0] for x in data.x_gamma) if isinstance(data.x_gamma, list) else data.x_gamma.shape[0]
-    
-    k_params = 0
-    K = params.log_pi0.shape[0]
-    
-    if params.theta is not None:
-        D_trans = params.theta.shape[0]
-        k_params += D_trans * K * (K - 1)
-    else:
-        k_params += K * (K - 1)
-        
-    k_params += (K - 1)
-        
-    if params.W_bern is not None:
-        k_params += params.W_bern.size
-        
-    if params.W_gauss is not None:
-        k_params += params.W_gauss.size
-        M = params.W_gauss.shape[1]
-        k_params += K * (M * (M + 1) // 2)
-        
-    if params.W_multinom is not None:
-        D, C, K_check = params.W_multinom.shape
-        k_params += D * (C - 1) * K
-        
-    if params.W_negbin is not None:
-        k_params += params.W_negbin.size + K
-        
-    if params.W_gamma is not None:
-        k_params += params.W_gamma.size + K
-        
-    bic = k_params * jnp.log(n_obs) - 2 * max_log_lik
-    
-    return bic
+
 
