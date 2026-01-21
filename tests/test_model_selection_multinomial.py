@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 # Ensure src is in path if running directly
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../src'))
 
 from glmhmm.structs import GLMHMMData, GLMHMMConfig, GLMHMMParams
 from glmhmm.fit import fit_glmhmm
@@ -17,6 +17,7 @@ from glmhmm.utils import simulate_data_for_glmhmm
 from glmhmm.model_selection_factorized_bq import compute_factorized_evidence
 from glmhmm.initialize import initialize_params
 from glmhmm.fit import e_step
+from glmhmm import compute_bic
 
 def test_model_selection_multinomial():
     key = random.PRNGKey(42)
@@ -72,8 +73,8 @@ def test_model_selection_multinomial():
             num_states=K,
             num_em_iters=100,
             tol=1e-5,
-            l2_reg_multinom=10.0,
-            l2_reg_trans=10.0
+            l2_reg_multinom=1.0,
+            l2_reg_trans=1.0
         )
         
         init_params = initialize_params(data, config, seed=K*99)
@@ -89,33 +90,82 @@ def test_model_selection_multinomial():
         # Assuming model_selection.py has been updated for Multinomial
         log_Z, log_Z_var = compute_factorized_evidence(data, params, config, gammas, xis, key=subkey)
         
-        # BIC
-        from glmhmm.model_selection import compute_bic
+        # BIC & Implied Log Z
+        from glmhmm import compute_bic, compute_implied_log_z
         bic = compute_bic(data, params, lml_hist[-1])
+        implied_lz = compute_implied_log_z(bic)
         
         results[K] = log_Z
         variances[K] = log_Z_var
-        print(f"K={K} | Evidence: {log_Z:.2f} +/- {jnp.sqrt(log_Z_var):.2f} | BIC: {bic:.2f}")
+        
+        print(f"K={K} | Evidence: {log_Z:.2f} +/- {jnp.sqrt(log_Z_var):.2f} | BIC: {bic:.2f} | Implied logZ: {implied_lz:.2f}")
 
     print("\nFinal Results:")
     ks = []
     lmls = []
     errs = []
+    implied_lzs = [] # Store for plotting
+    bics = {}
+    implied_zs = {}
+    
+    for K in [2, 3, 4]:
+        # ... (same setup) ...
+        print(f"\n--- Fitting K={K} ---")
+        config = GLMHMMConfig(
+            num_states=K,
+            num_em_iters=100,
+            tol=1e-5,
+            l2_reg_multinom=1.0,
+            l2_reg_trans=1.0
+        )
+        
+        init_params = initialize_params(data, config, seed=K*99)
+        
+        print("Starting EM...")
+        params, lml_hist = fit_glmhmm(data, config, initial_params=init_params)
+        print(f"  Fit Final LML (EM): {lml_hist[-1]:.2f} (Epochs: {len(lml_hist)})")
+        
+        # Evidence
+        gammas, xis, _ = e_step(params, data)
+        
+        key, subkey = random.split(key)
+        log_Z, log_Z_var = compute_factorized_evidence(data, params, config, gammas, xis, key=subkey)
+        
+        # BIC
+        from glmhmm import compute_bic, compute_implied_log_z
+        bic = compute_bic(data, params, lml_hist[-1])
+        ilz = compute_implied_log_z(bic)
+        
+        results[K] = log_Z
+        variances[K] = log_Z_var
+        bics[K] = bic
+        implied_zs[K] = ilz
+        
+        print(f"K={K} | Evidence: {log_Z:.2f} +/- {jnp.sqrt(log_Z_var):.2f} | BIC: {bic:.2f} | Implied logZ: {ilz:.2f}")
+
+    print("\nFinal Results:")
+    ks = []
+    lmls = []
+    errs = []
+    ilzs = []
+    
     for k, v in results.items():
-        print(f"K={k}: {v:.2f} +/- {jnp.sqrt(variances[k]):.2f}")
+        print(f"K={k}: BQ={v:.2f}, BIC={bics[k]:.2f}, Implied={implied_zs[k]:.2f}")
         ks.append(k)
         lmls.append(v)
         errs.append(jnp.sqrt(variances[k]))
+        ilzs.append(implied_zs[k])
 
     best_K = max(results, key=results.get)
-    print(f"Selected K: {best_K}")
+    print(f"Selected K (BQ): {best_K}")
     
     # Plot
     plt.figure(figsize=(8, 5))
-    plt.errorbar(ks, lmls, yerr=errs, fmt='-o', capsize=5, label='Log Model Evidence')
+    plt.errorbar(ks, lmls, yerr=errs, fmt='-o', capsize=5, label='BQ Log Evidence')
+    plt.plot(ks, ilzs, '-s', label='Implied Log Z (BIC)')
     plt.xlabel('Number of States (K)')
     plt.ylabel('Log Evidence')
-    plt.title(f'Model Selection (Multinomial BQ, L2={config.l2_reg_multinom})')
+    plt.title(f'Model Selection (Multinomial, L2={config.l2_reg_multinom})')
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.savefig('multinomial_model_selection_results.png')

@@ -665,3 +665,33 @@ def batch_m_step_updates(
     Sigma = Sigma + jnp.eye(m, dtype=dtype)[..., None] * jitter 
 
     return W, Sigma
+
+def initial_distribution_m_step(
+    gammas: List[jnp.ndarray], 
+    dirichlet_alpha: float = 1.0001
+    ) -> jnp.ndarray:
+    """
+    Updates initial state probabilities (pi0) using the expected state at t=0.
+    
+    Args:
+        gammas: List of state responsibilities, each shape (T_i, K).
+        dirichlet_alpha: Concentration parameter for Dirichlet prior (default slightly > 1 for stability).
+        
+    Returns:
+        log_pi0: Log of updated initial state probabilities.
+    """
+    K = gammas[0].shape[1]
+    
+    if isinstance(gammas, list):
+        init_counts = sum([g[0] for g in gammas]) # (K,)
+    else:
+        if gammas.ndim == 3:
+             init_counts = jnp.sum(gammas[:, 0, :], axis=0) # (K,)
+        else:
+             init_counts = gammas[0] # (K,)
+
+    pseudo_counts = dirichlet_alpha - 1.0
+    denom = jnp.sum(init_counts + pseudo_counts)
+    pi0 = (init_counts + pseudo_counts) / denom
+    
+    return jnp.log(pi0 + 1e-10)

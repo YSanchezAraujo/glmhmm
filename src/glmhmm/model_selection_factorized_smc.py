@@ -121,7 +121,6 @@ def compute_factorized_evidence_smc(
     logit_trans_evidence = 0.0
     
     if data.x_trans is not None:
-        # input - driven transition case
         x_trans_flat = flatten_list(data.x_trans) 
         if isinstance(xis, list):
              x_trans_inputs = jnp.concatenate([x for x in data.x_trans], axis=0)
@@ -398,5 +397,23 @@ def compute_factorized_evidence_smc(
     expected_complete_ll = expected_ll_init + expected_ll_trans + expected_ll_emit
     entropy = log_P_Y - expected_complete_ll
     
-    total_smc_evidence = log_Z_trans + log_Z_glm + entropy
+    if isinstance(gammas, list):
+         n_sequences = len(gammas)
+         init_counts = sum([g[0] for g in gammas]) # (K,)
+    else:
+         n_sequences = gammas.shape[0]
+         if gammas.ndim == 3:
+             init_counts = jnp.sum(gammas[:, 0, :], axis=0)
+         else:
+             init_counts = gammas[0]
+
+    alpha_prior = 1.0
+    term1 = jnp.sum(jax.scipy.special.gammaln(alpha_prior + init_counts))
+    term2 = jax.scipy.special.gammaln(jnp.sum(alpha_prior + init_counts))
+    term3 = jnp.sum(jax.scipy.special.gammaln(alpha_prior))
+    term4 = jax.scipy.special.gammaln(jnp.sum(jnp.array([alpha_prior] * K)))
+    
+    log_Z_init = (term1 - term2) - (term3 - term4)
+    
+    total_smc_evidence = log_Z_init + log_Z_trans + log_Z_glm + entropy
     return total_smc_evidence

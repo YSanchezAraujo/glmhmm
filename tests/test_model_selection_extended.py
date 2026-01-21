@@ -9,12 +9,13 @@ import sys
 import os
 
 # Create path to src
-sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../src'))
 
 from glmhmm.structs import GLMHMMData, GLMHMMConfig, GLMHMMParams
 from glmhmm.fit import fit_glmhmm
 from glmhmm.utils import simulate_data_for_glmhmm
-from glmhmm.model_selection_factorized_bq import compute_factorized_evidence, compute_bic
+from glmhmm.model_selection_factorized_bq import compute_factorized_evidence
+from glmhmm import compute_bic
 from glmhmm.initialize import initialize_params
 from glmhmm.fit import e_step
 
@@ -124,8 +125,6 @@ def test_model_selection_gamma():
     A_true = jnp.array([[0.8, 0.1, 0.1], [0.1, 0.8, 0.1], [0.1, 0.1, 0.8]])
     pi0 = jnp.ones(3)/3
     
-    # W_gamma: (D, K).
-    # Mean = exp(X @ W). 
     W_gm_true = jnp.array([
         [0.5, 1.5, 2.5], # Feature 1 drives different means
         [0.0, 0.0, 0.0]

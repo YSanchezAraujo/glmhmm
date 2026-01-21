@@ -98,14 +98,12 @@ def compute_log_marginal_likelihood(params: GLMHMMParams, data: GLMHMMData) -> f
     total_lml = 0.0
     
     seq_sources = [data.x_trans, data.x_bern, data.x_multinom, data.x_negbin, data.x_gamma]
-    # Handle list of lists for x_gauss if necessary, essentially finding n_sequences
+
     if data.x_gauss is not None:
          if isinstance(data.x_gauss, list) and len(data.x_gauss) > 0:
              n_sequences = len(data.x_gauss)
          else:
-             # Fallback or empty
              n_sequences = 0
-             # Check other sources
              if n_sequences == 0:
                   n_sequences = next((len(s) for s in seq_sources if s is not None), 0)
     else:
@@ -144,8 +142,8 @@ def compute_log_marginal_likelihood(params: GLMHMMParams, data: GLMHMMData) -> f
         
         if params.theta is not None:
             data_x_trans_i = data.x_trans[i] if data.x_trans is not None else None
+
             if data_x_trans_i is None:
-                 # Should not happen if params.theta is input driven
                  raise ValueError("params.theta is present but data.x_trans is None")
             A_t = compute_A_from_theta_and_inputs(data_x_trans_i, params.theta)
             log_A_t = jnp.log(A_t)
@@ -183,7 +181,7 @@ def e_step(params: GLMHMMParams, data: GLMHMMData):
     gammas, xis = [], []
     
     seq_sources = [data.x_trans, data.x_bern, data.x_multinom, data.x_negbin, data.x_gamma]
-    # Helper to get n_sequences robustly
+
     if data.x_gauss is not None and isinstance(data.x_gauss, list) and len(data.x_gauss) > 0:
           n_sequences = len(data.x_gauss)
     else:
@@ -339,9 +337,11 @@ def m_step(
         xi_sum = jnp.sum(jnp.concatenate(xis, axis=0), axis=0)
         new_A = xi_sum / jnp.sum(xi_sum, axis=1, keepdims=True)
         new_log_A = jnp.log(new_A + 1e-9)
+    
+    new_log_pi0 = initial_distribution_m_step(gammas, dirichlet_alpha=1.0001)
 
     return GLMHMMParams(
-        log_pi0=params.log_pi0, 
+        log_pi0=new_log_pi0, 
         log_A=new_log_A,
         theta=new_theta,
         W_bern=new_W_bern,

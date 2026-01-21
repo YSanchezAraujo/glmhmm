@@ -137,7 +137,7 @@ def run_bq_tinygp(
     
     log_ratios = log_probs - log_qs - log_z_laplace
     ratios = jnp.exp(log_ratios)
-    ratios = jnp.nan_to_num(ratios, nan=1.0, posinf=1.0, neginf=0.0)
+    ratios = jnp.nan_to_num(ratios, nan=0.0, posinf=1e6, neginf=0.0)
     
     mean_ratio = jnp.mean(ratios)
     y_train = ratios - mean_ratio
@@ -210,6 +210,8 @@ def compute_factorized_evidence(
         key = random.PRNGKey(0)
     
     K = config.num_states
+    min_samples = 200
+    samples_per_dim = 20
     
     if isinstance(xis, list):
          counts_trans = sum([jnp.sum(x, axis=0) for x in xis]) # (K, K)
@@ -270,7 +272,10 @@ def compute_factorized_evidence(
                  
                  return ll + prior + log_prior_const
                  
-             lz, var_lz = run_bq_tinygp(lp_theta, center_j, dim=D_trans*(K-1), key=subkey)
+             current_dim = D_trans*(K-1)
+             n_dynamic = max(min_samples, current_dim * samples_per_dim)
+             
+             lz, var_lz = run_bq_tinygp(lp_theta, center_j, dim=current_dim, n_samples=n_dynamic, key=subkey)
              logit_trans_evidence += lz
              var_logit_trans_evidence += var_lz
              
@@ -281,7 +286,10 @@ def compute_factorized_evidence(
             center_j = logit_A_full[j]
             lp_fn = make_log_prob_trans_row(counts_trans[j])
             
-            lz, var_lz = run_bq_tinygp(lp_fn, center_j, dim=K, key=subkey)
+            current_dim = K
+            n_dynamic = max(min_samples, current_dim * samples_per_dim)
+            
+            lz, var_lz = run_bq_tinygp(lp_fn, center_j, dim=current_dim, n_samples=n_dynamic, key=subkey)
             logit_trans_evidence += lz
             var_logit_trans_evidence += var_lz
             
@@ -317,7 +325,10 @@ def compute_factorized_evidence(
                 
                 return jnp.sum(gs * ll_point) + log_prior_val + log_prior_const
             
-            lz, var_lz = run_bq_tinygp(lp_bern, center, dim=center.shape[0], key=subkey)
+            current_dim = center.shape[0]
+            n_dynamic = max(min_samples, current_dim * samples_per_dim)
+            
+            lz, var_lz = run_bq_tinygp(lp_bern, center, dim=current_dim, n_samples=n_dynamic, key=subkey)
             log_Z_glm += lz
             var_log_Z_glm += var_lz
             
@@ -353,7 +364,10 @@ def compute_factorized_evidence(
                 
                 return jnp.sum(gs_expanded * ll_point) + log_prior_val + log_prior_const
 
-            lz, var_lz = run_bq_tinygp(lp_gauss, w_flat_center, dim=D_in*M_out, key=subkey)
+            current_dim = D_in*M_out
+            n_dynamic = max(min_samples, current_dim * samples_per_dim)
+            
+            lz, var_lz = run_bq_tinygp(lp_gauss, w_flat_center, dim=current_dim, n_samples=n_dynamic, key=subkey)
             log_Z_glm += lz
             var_log_Z_glm += var_lz
             
@@ -384,7 +398,10 @@ def compute_factorized_evidence(
                  
                  return jnp.sum(gs * ll_point) + log_prior_val + log_prior_const
 
-             lz, var_lz = run_bq_tinygp(lp_multinom, w_flat_center, dim=D_mn*(C_mn-1), key=subkey)
+             current_dim = D_mn*(C_mn-1)
+             n_dynamic = max(min_samples, current_dim * samples_per_dim)
+             
+             lz, var_lz = run_bq_tinygp(lp_multinom, w_flat_center, dim=current_dim, n_samples=n_dynamic, key=subkey)
              log_Z_glm += lz
              var_log_Z_glm += var_lz
 
@@ -422,7 +439,10 @@ def compute_factorized_evidence(
                  
                  return jnp.sum(gs * ll_point) + log_prior_w + log_prior_const_w + log_prior_phi
                  
-             lz, var_lz = run_bq_tinygp(lp_negbin, center_combined, dim=D_nb+1, key=subkey)
+             current_dim = D_nb+1
+             n_dynamic = max(min_samples, current_dim * samples_per_dim)
+             
+             lz, var_lz = run_bq_tinygp(lp_negbin, center_combined, dim=current_dim, n_samples=n_dynamic, key=subkey)
              log_Z_glm += lz
              var_log_Z_glm += var_lz
              
@@ -461,7 +481,10 @@ def compute_factorized_evidence(
                  
                  return jnp.sum(gs * ll_point) + log_prior_w + log_prior_const_w + log_prior_alpha
 
-             lz, var_lz = run_bq_tinygp(lp_gamma, center_combined, dim=D_gm+1, key=subkey)
+             current_dim = D_gm+1
+             n_dynamic = max(min_samples, current_dim * samples_per_dim)
+             
+             lz, var_lz = run_bq_tinygp(lp_gamma, center_combined, dim=current_dim, n_samples=n_dynamic, key=subkey)
              log_Z_glm += lz
              var_log_Z_glm += var_lz
 
@@ -517,9 +540,7 @@ def compute_factorized_evidence(
          expected_ll_emit += total_gauss_ll
          
     if (params.W_multinom is not None) and (data.x_multinom is not None):
-        # W_multinom is (F, C, K)
         ll_unweighted = multinomial_glmhmm_loglikelihood(flatten_list(data.x_multinom), flatten_list(data.y_multinom), params.W_multinom)
-        # ll_unweighted is (N, K)
         expected_ll_emit += jnp.sum(gammas_flat * ll_unweighted)
         
     if (params.W_negbin is not None) and (data.x_negbin is not None):
@@ -531,10 +552,28 @@ def compute_factorized_evidence(
         expected_ll_emit += jnp.sum(gammas_flat * ll_gm)
 
     expected_complete_ll = expected_ll_init + expected_ll_trans + expected_ll_emit
-    
     entropy = log_P_Y - expected_complete_ll
+    
+    if isinstance(gammas, list):
+         n_sequences = len(gammas)
+         init_counts = sum([g[0] for g in gammas]) # (K,)
+    else:
+         n_sequences = gammas.shape[0]
+         if gammas.ndim == 3:
+             init_counts = jnp.sum(gammas[:, 0, :], axis=0)
+         else:
+             n_sequences = 1
+             init_counts = gammas[0]
 
-    total_log_Z = log_Z_trans + log_Z_glm + entropy
+    alpha_prior = 1.0
+    term1 = jnp.sum(jax.scipy.special.gammaln(alpha_prior + init_counts))
+    term2 = jax.scipy.special.gammaln(jnp.sum(alpha_prior + init_counts))
+    term3 = jnp.sum(jax.scipy.special.gammaln(alpha_prior))
+    term4 = jax.scipy.special.gammaln(jnp.sum(jnp.array([alpha_prior] * K)))
+    
+    log_Z_init = (term1 - term2) - (term3 - term4)
+
+    total_log_Z = log_Z_init + log_Z_trans + log_Z_glm + entropy
     total_var = var_log_Z_trans + var_log_Z_glm
     
     return total_log_Z, total_var

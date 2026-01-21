@@ -519,3 +519,78 @@ def find_best_permutation(true_params, fit_output):
         permuted_results['Sigma_gauss'] = f_Sig[:, :, p]
         
     return best_perm, permuted_results
+
+def simulate_train_test_data(
+    key, 
+    K=3, 
+    D=2, 
+    n_train=10, 
+    n_test=5, 
+    n_steps=200
+):
+    """
+    Generates synthetic data for Bernoulli GLM-HMM with static transitions.
+    Returns:
+        train_data: GLMHMMData
+        test_data: GLMHMMData
+        full_data: GLMHMMData (concatenation of train and test)
+        true_params: dict
+    """
+    key, subkey_p = random.split(key)
+    
+    if K == 3:
+        A = jnp.array([
+            [0.9, 0.05, 0.05],
+            [0.05, 0.9, 0.05],
+            [0.05, 0.05, 0.9]
+        ])
+    else:
+        A = jnp.eye(K) * 0.8 + 0.2/K
+        A = A / jnp.sum(A, axis=1, keepdims=True)
+        
+    pi0 = jnp.ones(K) / K
+    
+    key, subkey_w = random.split(key)
+    W = random.normal(subkey_w, (D, K)) 
+    W = W.at[0, 0].set(0.0) 
+
+    W = W.at[1, 1].set(4.0) 
+    W = W.at[0, 1].set(0.0)
+
+    W = W.at[1, 2].set(0.0)
+    W = W.at[0, 2].set(3.0)
+        
+    true_params = {
+        "pi0": pi0,
+        "A": A,
+        "W_bern": W
+    }
+    
+    key, subkey_train = random.split(key)
+    train_sim = simulate_data_for_glmhmm(
+        subkey_train, true_params, n_train, n_steps, n_bern_features=D
+    )
+    
+    key, subkey_test = random.split(key)
+    test_sim = simulate_data_for_glmhmm(
+        subkey_test, true_params, n_test, n_steps, n_bern_features=D
+    )
+    
+    from .structs import GLMHMMData
+    
+    train_data = GLMHMMData(
+        x_bern=train_sim['x_set_bern'],
+        y_bern=train_sim['y_set_bern']
+    )
+    
+    test_data = GLMHMMData(
+        x_bern=test_sim['x_set_bern'],
+        y_bern=test_sim['y_set_bern']
+    )
+    
+    full_data = GLMHMMData(
+        x_bern=train_sim['x_set_bern'] + test_sim['x_set_bern'],
+        y_bern=train_sim['y_set_bern'] + test_sim['y_set_bern']
+    )
+    
+    return train_data, test_data, full_data, true_params
