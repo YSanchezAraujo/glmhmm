@@ -264,12 +264,16 @@ def m_step(
     """
     gamma_concat = jnp.concatenate(gammas, axis=0)
     
+    # Calculate bias ridges from config
+    bias_ridge_emit = 1.0 / config.prior_var_bias_emit
+    bias_ridge_trans = 1.0 / config.prior_var_bias_trans
+    
     new_W_bern = params.W_bern
     if params.W_bern is not None:
         X_all = jnp.concatenate(data.x_bern, axis=0)
         Y_all = jnp.concatenate(data.y_bern, axis=0)
         new_W_bern, _ = bern_m_step_optax(
-            X_all, Y_all, gamma_concat, params.W_bern, config.l2_reg_bern
+            X_all, Y_all, gamma_concat, params.W_bern, config.l2_reg_bern, bias_ridge_emit
         )
 
     new_W_multinom = params.W_multinom
@@ -277,7 +281,7 @@ def m_step(
         X_all = jnp.concatenate(data.x_multinom, axis=0)
         Y_all = jnp.concatenate(data.y_multinom, axis=0)
         new_W_multinom, _ = multinomial_obs_m_step_optax(
-            X_all, Y_all, gamma_concat, params.W_multinom, config.l2_reg_multinom
+            X_all, Y_all, gamma_concat, params.W_multinom, config.l2_reg_multinom, bias_ridge_emit
         )
 
     new_W_nb, new_phi_nb = params.W_negbin, params.phi_negbin
@@ -285,7 +289,7 @@ def m_step(
         X_all = jnp.concatenate(data.x_negbin, axis=0)
         Y_all = jnp.concatenate(data.y_negbin, axis=0)
         new_W_nb, new_phi_nb, _ = negbin_m_step_optax(
-            X_all, Y_all, gamma_concat, params.W_negbin, params.phi_negbin, config.l2_reg_negbin
+            X_all, Y_all, gamma_concat, params.W_negbin, params.phi_negbin, config.l2_reg_negbin, bias_ridge_emit
         )
 
     new_W_gamma, new_alpha_gamma = params.W_gamma, params.alpha_gamma
@@ -293,7 +297,7 @@ def m_step(
             X_all = jnp.concatenate(data.x_gamma, axis=0)
             Y_all = jnp.concatenate(data.y_gamma, axis=0)
             new_W_gamma, new_alpha_gamma, _ = gamma_m_step_optax(
-                X_all, Y_all, gamma_concat, params.W_gamma, params.alpha_gamma, config.l2_reg_gamma
+                X_all, Y_all, gamma_concat, params.W_gamma, params.alpha_gamma, config.l2_reg_gamma, bias_ridge_emit
             )
 
     new_W_gauss, new_Sigma_gauss = params.W_gauss, params.Sigma_gauss
@@ -331,10 +335,14 @@ def m_step(
         X_trans_all = jnp.concatenate(data.x_trans, axis=0)
         xi_all = jnp.concatenate(xis, axis=0)
         new_theta, _ = transitions_m_step_optax_reduced(
-             X_trans_all, xi_all, params.theta, jnp.ones(config.num_states), config.l2_reg_trans
+             X_trans_all, xi_all, params.theta, jnp.ones(config.num_states), bias_ridge_trans, config.l2_reg_trans
         )
     else:
         xi_sum = jnp.sum(jnp.concatenate(xis, axis=0), axis=0)
+        if config.transition_stickiness > 0.0:
+            diag_indices = jnp.arange(xi_sum.shape[0])
+            xi_sum = xi_sum.at[diag_indices, diag_indices].add(config.transition_stickiness)
+            
         new_A = xi_sum / jnp.sum(xi_sum, axis=1, keepdims=True)
         new_log_A = jnp.log(new_A + 1e-9)
     

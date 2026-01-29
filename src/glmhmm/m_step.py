@@ -37,7 +37,8 @@ def bern_neg_loglik_with_prior(
     X_bern: jnp.ndarray,  
     y_bern: jnp.ndarray, 
     gamma_state: jnp.ndarray,
-    l2_reg: jnp.float64
+    l2_reg: jnp.float64,
+    bias_ridge: jnp.float64
 ) -> jnp.ndarray:
     """
     Computes the negative log-likelihood for a Bernoulli GLM for a single state,
@@ -55,8 +56,9 @@ def bern_neg_loglik_with_prior(
     logits = X_bern @ w_bern_state
     y = y_bern.astype(jnp.float32)
     nll_data = -jnp.dot(gamma_state * y, logits) + jnp.sum(gamma_state * nn.softplus(logits))
-    l2_prior = l2_reg * 0.5 * jnp.sum(w_bern_state[1:]**2)
-    total_nll = nll_data + l2_prior
+    l2_prior_feat = l2_reg * 0.5 * jnp.sum(w_bern_state[1:]**2)
+    l2_prior_bias = bias_ridge * 0.5 * w_bern_state[0]**2
+    total_nll = nll_data + l2_prior_feat + l2_prior_bias
     return total_nll
 
 # this is mostly from the optax documentation
@@ -68,11 +70,12 @@ def run_opt_bern(
     y_bern,
     gamma_state,
     l2_reg,
+    bias_ridge,
     max_iter, 
     tol
 ):
     loss_fn = partial(bern_neg_loglik_with_prior, X_bern=X_bern, y_bern=y_bern, 
-                     gamma_state=gamma_state, l2_reg=l2_reg)
+                     gamma_state=gamma_state, l2_reg=l2_reg, bias_ridge=bias_ridge)
     return run_lbfgs_optimizer(loss_fn, init_params, max_iter, tol)
 
 @partial(jit, static_argnames=("tol", "num_opt_steps"))
@@ -80,6 +83,7 @@ def bern_init_opt(
     X_bern: jnp.ndarray,
     y_bern: jnp.ndarray,
     l2_reg: jnp.float64 = 1.0,
+    bias_ridge: jnp.float64 = 0.25,
     tol: float = 1e-2, 
     num_opt_steps: int = 200    
 ): 
@@ -97,7 +101,7 @@ def bern_init_opt(
     """
     gamma_state_ones = jnp.ones(X_bern.shape[0], dtype=X_bern.dtype)
     initial_w = jnp.zeros(X_bern.shape[1], dtype=X_bern.dtype)
-    final_params, _ = run_opt_bern(initial_w, X_bern, y_bern, gamma_state_ones, l2_reg, num_opt_steps, tol)
+    final_params, _ = run_opt_bern(initial_w, X_bern, y_bern, gamma_state_ones, l2_reg, bias_ridge, num_opt_steps, tol)
     return final_params
 
 @partial(jit, static_argnames=("tol", "num_opt_steps")) 
@@ -107,6 +111,7 @@ def bern_m_step_optax(
     gamma_all_states: jnp.ndarray, 
     initial_W_bern: jnp.ndarray,
     l2_reg: jnp.float64,
+    bias_ridge: jnp.float64,
     tol: float = 1e-3,
     num_opt_steps: int = 2000
 ) -> Tuple[jnp.ndarray, jnp.ndarray]: 
@@ -131,10 +136,10 @@ def bern_m_step_optax(
         final_states: Optimizer states for all K states (for diagnostics).
     """
     optimizer = vmap(
-        run_opt_bern, in_axes=(0, None, None, 0, None, None, None)
+        run_opt_bern, in_axes=(0, None, None, 0, None, None, None, None)
     )
     optimized_Ws_T, final_state = optimizer(
-        initial_W_bern.T, X_bern, y_bern, gamma_all_states.T, l2_reg, num_opt_steps, tol
+        initial_W_bern.T, X_bern, y_bern, gamma_all_states.T, l2_reg, bias_ridge, num_opt_steps, tol
     )
     return optimized_Ws_T.T, final_state
 
@@ -144,7 +149,8 @@ def multinomial_obs_negloglik(
     X: jnp.ndarray,         # (n_trials, n_features)
     y_integers: jnp.ndarray,# (n_trials,) -> Integer class indices
     gamma: jnp.ndarray,     # (n_trials,) -> State responsibilities
-    l2_reg: float
+    l2_reg: float,
+    bias_ridge: float
 ):
     zeros = jnp.zeros((w_reduced.shape[0], 1), dtype=w_reduced.dtype)
     w_full = jnp.concatenate([w_reduced, zeros], axis=1)
@@ -152,9 +158,10 @@ def multinomial_obs_negloglik(
     logits = X @ w_full
     per_sample_loss = optax.softmax_cross_entropy_with_integer_labels(logits, labels=y_integers)
     weighted_loss = jnp.dot(gamma, per_sample_loss)
-    l2_penalty = l2_reg * 0.5 * jnp.sum(w_reduced**2)
+    l2_penalty_feat = l2_reg * 0.5 * jnp.sum(w_reduced[1:]**2)
+    l2_penalty_bias = bias_ridge * 0.5 * jnp.sum(w_reduced[0]**2)
     
-    return weighted_loss + l2_penalty
+    return weighted_loss + l2_penalty_feat + l2_penalty_bias
 
 def run_opt_multinomial_obs(
     init_w_reduced, 
@@ -162,11 +169,12 @@ def run_opt_multinomial_obs(
     y_integers,
     gamma,
     l2_reg,
+    bias_ridge,
     max_iter, 
     tol
 ):
     loss_fn = partial(multinomial_obs_negloglik, X=X, y_integers=y_integers, 
-                     gamma=gamma, l2_reg=l2_reg)
+                     gamma=gamma, l2_reg=l2_reg, bias_ridge=bias_ridge)
     return run_lbfgs_optimizer(loss_fn, init_w_reduced, max_iter, tol)
 
 
@@ -177,6 +185,7 @@ def multinomial_obs_m_step_optax(
     gamma_all_states: jnp.ndarray, # (N, K)
     initial_W: jnp.ndarray,        # (F, C, K) 
     l2_reg: float,
+    bias_ridge: float,
     tol: float = 1e-3,
     num_opt_steps: int = 2000
 ):
@@ -206,7 +215,7 @@ def multinomial_obs_m_step_optax(
     
     optimizer = vmap(
         run_opt_multinomial_obs, 
-        in_axes=(2, None, None, 1, None, None, None),
+        in_axes=(2, None, None, 1, None, None, None, None),
         out_axes=(2, 0) 
     )
 
@@ -216,6 +225,7 @@ def multinomial_obs_m_step_optax(
         y, 
         gamma_all_states, 
         l2_reg, 
+        bias_ridge,
         num_opt_steps, 
         tol
     )
@@ -234,7 +244,8 @@ def negbin_neg_loglik_with_prior(
     X: jnp.ndarray,  
     y: jnp.ndarray, 
     gamma_state: jnp.ndarray,
-    l2_reg: jnp.float64
+    l2_reg: jnp.float64,
+    bias_ridge: jnp.float64
 ) -> jnp.ndarray:
     
     w_state, log_phi_scalar = params
@@ -247,8 +258,9 @@ def negbin_neg_loglik_with_prior(
     log_1_minus_p = jnp.log(mu) - jnp.log(phi_state + mu)
     per_sample_ll = term1 + (phi_state * log_p) + (y_float * log_1_minus_p)
     nll_data = -jnp.dot(gamma_state, per_sample_ll)    
-    l2_prior = l2_reg * 0.5 * jnp.sum(w_state[1:]**2)
-    return nll_data + l2_prior
+    l2_prior_feat = l2_reg * 0.5 * jnp.sum(w_state[1:]**2)
+    l2_prior_bias = bias_ridge * 0.5 * w_state[0]**2
+    return nll_data + l2_prior_feat + l2_prior_bias
 
 def run_opt_negbin(
     init_w,
@@ -257,12 +269,13 @@ def run_opt_negbin(
     y,
     gamma_state,
     l2_reg,
+    bias_ridge,
     max_iter, 
     tol
 ):
     init_params = (init_w, init_log_phi)
     loss_fn = partial(negbin_neg_loglik_with_prior, X=X, y=y, 
-                     gamma_state=gamma_state, l2_reg=l2_reg)
+                     gamma_state=gamma_state, l2_reg=l2_reg, bias_ridge=bias_ridge)
     return run_lbfgs_optimizer(loss_fn, init_params, max_iter, tol, 
                                error_fn=tuple_param_error_fn)
 
@@ -274,12 +287,13 @@ def negbin_m_step_optax(
     initial_W: jnp.ndarray,
     initial_phi: jnp.ndarray,
     l2_reg: jnp.float64,
+    bias_ridge: jnp.float64,
     tol: float = 1e-3,
     num_opt_steps: int = 2000
 ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]: 
     
     optimizer = vmap(
-        run_opt_negbin, in_axes=(0, 0, None, None, 0, None, None, None) 
+        run_opt_negbin, in_axes=(0, 0, None, None, 0, None, None, None, None) 
     )
     
     safe_initial_phi = jnp.maximum(initial_phi, 1e-6)
@@ -292,6 +306,7 @@ def negbin_m_step_optax(
         y, 
         gamma_all_states.T, 
         l2_reg, 
+        bias_ridge,
         num_opt_steps, 
         tol
     )
@@ -306,6 +321,7 @@ def gamma_neg_loglik_with_prior(
     y: jnp.ndarray, 
     gamma_state: jnp.ndarray,
     l2_reg: jnp.float64,
+    bias_ridge: jnp.float64,
     eps: float = 1e-8
 ) -> jnp.ndarray:
     """
@@ -330,9 +346,10 @@ def gamma_neg_loglik_with_prior(
     
     per_sample_ll = term1 + term2 + term3 + term4
     nll_data = -jnp.dot(gamma_state, per_sample_ll)
-    l2_prior = l2_reg * 0.5 * jnp.sum(w_state[1:]**2)
+    l2_prior_feat = l2_reg * 0.5 * jnp.sum(w_state[1:]**2)
+    l2_prior_bias = bias_ridge * 0.5 * w_state[0]**2
     
-    return nll_data + l2_prior
+    return nll_data + l2_prior_feat + l2_prior_bias
 
 def run_opt_gamma(
     init_w,
@@ -341,12 +358,13 @@ def run_opt_gamma(
     y,
     gamma_state,
     l2_reg,
+    bias_ridge,
     max_iter, 
     tol
 ):
     init_params = (init_w, init_log_alpha)
     loss_fn = partial(gamma_neg_loglik_with_prior, X=X, y=y, 
-                     gamma_state=gamma_state, l2_reg=l2_reg)
+                     gamma_state=gamma_state, l2_reg=l2_reg, bias_ridge=bias_ridge)
     return run_lbfgs_optimizer(loss_fn, init_params, max_iter, tol, 
                                error_fn=tuple_param_error_fn)
 
@@ -358,12 +376,13 @@ def gamma_m_step_optax(
     initial_W: jnp.ndarray,
     initial_alpha: jnp.ndarray,
     l2_reg: jnp.float64,
+    bias_ridge: jnp.float64,
     tol: float = 1e-3,
     num_opt_steps: int = 2000
 ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]: 
     
     optimizer = vmap(
-        run_opt_gamma, in_axes=(0, 0, None, None, 0, None, None, None) 
+        run_opt_gamma, in_axes=(0, 0, None, None, 0, None, None, None, None) 
     )
     
     safe_initial_alpha = jnp.maximum(initial_alpha, 1e-6)
@@ -376,6 +395,7 @@ def gamma_m_step_optax(
         y, 
         gamma_all_states.T, 
         l2_reg, 
+        bias_ridge,
         num_opt_steps, 
         tol
     )
@@ -387,7 +407,8 @@ def multinomial_negloglik_reduced(
     U,
     xi_state,
     alpha_row_minus_1, 
-    l2_reg
+    l2_reg,
+    bias_ridge
 ):
     """
     Optimizes P-1 weights for transitions from a single source state.
@@ -398,16 +419,16 @@ def multinomial_negloglik_reduced(
     theta_full = jnp.concatenate([theta_reduced, zeros], axis=1)
     logits = U @ theta_full  # (T-1, K)
     xi_normalized = xi_state / (jnp.sum(xi_state, axis=1, keepdims=True) + 1e-9)
-    
     weights = jnp.sum(xi_state, axis=1)  # (T-1,)
     per_step_loss = optax.softmax_cross_entropy(logits, labels=xi_normalized)
     data_loss = jnp.sum(weights * per_step_loss)
-    
-    l2_penalty = l2_reg * 0.5 * jnp.sum(theta_reduced[1:]**2)
+    data_loss = jnp.sum(weights * per_step_loss)
+    l2_penalty_feat = l2_reg * 0.5 * jnp.sum(theta_reduced[1:]**2)
+    l2_penalty_bias = bias_ridge * 0.5 * jnp.sum(theta_reduced[0]**2)
     total_log_probs = jnp.sum(nn.log_softmax(logits, axis=-1), axis=0)
     dirichlet_penalty = -jnp.sum(alpha_row_minus_1 * total_log_probs)
     
-    return data_loss + dirichlet_penalty + l2_penalty
+    return data_loss + dirichlet_penalty + l2_penalty_feat + l2_penalty_bias
 
 def run_opt_multinomial_reduced(
     init_params, 
@@ -415,11 +436,12 @@ def run_opt_multinomial_reduced(
     xi,
     alpha_row_minus_1,
     l2_reg,
+    bias_ridge,
     max_iter, 
     tol
 ):
     loss_fn = partial(multinomial_negloglik_reduced, U=U, xi_state=xi, 
-                     alpha_row_minus_1=alpha_row_minus_1, l2_reg=l2_reg)
+                     alpha_row_minus_1=alpha_row_minus_1, l2_reg=l2_reg, bias_ridge=bias_ridge)
     return run_lbfgs_optimizer(loss_fn, init_params, max_iter, tol)
 
 @partial(jit, static_argnames=("tol", "num_opt_steps")) 
@@ -428,6 +450,7 @@ def transitions_m_step_optax_reduced(
     xi: jnp.ndarray,               
     initial_theta: jnp.ndarray,    # Shape: (n_features, n_states, n_states)
     dir_diag: jnp.ndarray,
+    bias_ridge: float,
     transition_ridge: float = 0.1,
     tol: float = 1e-3,
     num_opt_steps: int = 2000
@@ -466,11 +489,11 @@ def transitions_m_step_optax_reduced(
 
     optimizer = jax.vmap(
         run_opt_multinomial_reduced, 
-        in_axes=(1, None, 1, 0, None, None, None) 
+        in_axes=(1, None, 1, 0, None, None, None, None) 
     )
 
     optimized_theta_reduced, final_state = optimizer(
-        theta_reduced_init, U, xi, alpha_minus_1_matrix, transition_ridge, num_opt_steps, tol
+        theta_reduced_init, U, xi, alpha_minus_1_matrix, transition_ridge, bias_ridge, num_opt_steps, tol
     )
     
     optimized_theta_reduced = jnp.moveaxis(optimized_theta_reduced, 0, 1)

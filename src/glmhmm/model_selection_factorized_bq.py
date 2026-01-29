@@ -210,8 +210,8 @@ def compute_factorized_evidence(
         key = random.PRNGKey(0)
     
     K = config.num_states
-    min_samples = 200
-    samples_per_dim = 20
+    min_samples = 2000
+    samples_per_dim = 500
     
     if isinstance(xis, list):
          counts_trans = sum([jnp.sum(x, axis=0) for x in xis]) # (K, K)
@@ -221,16 +221,20 @@ def compute_factorized_evidence(
     log_Z_trans = 0.0
     var_log_Z_trans = 0.0
     
-    def make_log_prob_trans_row(row_counts, row_prior_alpha=1.1):
+    prior_var_trans = config.prior_var_bias_trans
+    prior_var_emit = config.prior_var_bias_emit
+    
+    def make_log_prob_trans_row(row_counts, state_idx, prior_dim=None, row_prior_alpha=1.1):
         def _lp(logit_row):
-            probs = jax.nn.softmax(logit_row)
             log_probs = jax.nn.log_softmax(logit_row)
             ll = jnp.dot(row_counts, log_probs)
-            D_trans = logit_row.shape[0]
-            log_prior_const = 0.5 * D_trans * (jnp.log(config.l2_reg_trans) - jnp.log(2 * jnp.pi))
-            prior = -0.5 * config.l2_reg_trans * jnp.sum(logit_row**2)
             
-            return ll + prior + log_prior_const
+            D_actual = logit_row.shape[0]
+            D_prior = prior_dim if prior_dim is not None else D_actual
+            weak_prior_prec = 1.0 / prior_var_trans
+            log_prior_const = 0.5 * D_prior * (jnp.log(weak_prior_prec) - jnp.log(2 * jnp.pi))
+            prior_l2 = -0.5 * weak_prior_prec * jnp.sum(logit_row**2)
+            return ll + prior_l2 + log_prior_const
         return _lp
 
     logit_trans_evidence = 0.0
@@ -252,9 +256,8 @@ def compute_factorized_evidence(
          for j in range(K):
              key, subkey = random.split(key)
              center_j_full = logit_theta_full[:, j, :] # (D, K)
-             center_j_reduced = center_j_full[:, :-1]  # (D, K-1)
+             center_j_reduced = center_j_full[:, :-1] - center_j_full[:, -1:]  # (D, K-1)
              center_j = center_j_reduced.flatten()     # (D * (K-1),)
-             
              targets_j = xis_flat[:, j, :] # (N, K)
              
              def lp_theta(theta_flat):
@@ -267,10 +270,22 @@ def compute_factorized_evidence(
                  ll = jnp.sum(targets_j * log_probs)
                  
                  dim_t = theta_flat.shape[0]
-                 log_prior_const = 0.5 * dim_t * (jnp.log(config.l2_reg_trans) - jnp.log(2 * jnp.pi))
-                 prior = -0.5 * config.l2_reg_trans * jnp.sum(theta_flat**2)
+                 indices = jnp.arange(dim_t)
+                 row_indices = indices // (K-1)
                  
-                 return ll + prior + log_prior_const
+                 is_bias = (row_indices == 0)
+                 
+                 reg_prec = config.l2_reg_trans
+                 prior = jnp.where(is_bias, 
+                                   -0.5 * config.transition_stickiness * (theta_flat**2), 
+                                   -0.5 * reg_prec * (theta_flat**2)
+                                  )
+                 
+                 log_prob_bias = -0.5 * (theta_flat**2) / prior_var_trans - 0.5 * jnp.log(2 * jnp.pi * prior_var_trans)
+                 log_prob_reg = -0.5 * reg_prec * (theta_flat**2) + 0.5 * (jnp.log(reg_prec) - jnp.log(2 * jnp.pi))
+                 log_prior_elements = jnp.where(is_bias, log_prob_bias, log_prob_reg)
+                 
+                 return ll + jnp.sum(log_prior_elements)
                  
              current_dim = D_trans*(K-1)
              n_dynamic = max(min_samples, current_dim * samples_per_dim)
@@ -280,21 +295,16 @@ def compute_factorized_evidence(
              var_logit_trans_evidence += var_lz
              
     else:
-        logit_A_full = params.log_A
         for j in range(K):
-            key, subkey = random.split(key)
-            center_j = logit_A_full[j]
-            lp_fn = make_log_prob_trans_row(counts_trans[j])
+            alpha_prior = jnp.ones(K)
+            if config.transition_stickiness > 0.0:
+                 alpha_prior = alpha_prior.at[j].add(config.transition_stickiness)
             
-            current_dim = K
-            n_dynamic = max(min_samples, current_dim * samples_per_dim)
+            row_counts = counts_trans[j]
+            term1 = jax.scipy.special.gammaln(jnp.sum(alpha_prior)) - jax.scipy.special.gammaln(jnp.sum(alpha_prior + row_counts))
+            term2 = jnp.sum(jax.scipy.special.gammaln(alpha_prior + row_counts) - jax.scipy.special.gammaln(alpha_prior))
             
-            lz, var_lz = run_bq_tinygp(lp_fn, center_j, dim=current_dim, n_samples=n_dynamic, key=subkey)
-            logit_trans_evidence += lz
-            var_logit_trans_evidence += var_lz
-            
-    log_Z_trans = logit_trans_evidence
-    var_log_Z_trans = var_logit_trans_evidence
+            log_Z_trans += term1 + term2
         
     log_Z_glm = 0.0
     var_log_Z_glm = 0.0
@@ -320,10 +330,18 @@ def compute_factorized_evidence(
                 ll_point = y_b_flat * logits - jnp.logaddexp(0.0, logits)
                 
                 D_w = w.shape[0]
-                log_prior_const = 0.5 * D_w * (jnp.log(config.l2_reg_bern) - jnp.log(2 * jnp.pi))
-                log_prior_val = -0.5 * config.l2_reg_bern * jnp.sum(w**2)
+                reg = config.l2_reg_bern
+                log_prior_bias = -0.5 * (w[0]**2) / prior_var_emit - 0.5 * jnp.log(2 * jnp.pi * prior_var_emit)
                 
-                return jnp.sum(gs * ll_point) + log_prior_val + log_prior_const
+                D_feat = D_w - 1
+                if D_feat > 0:
+                    log_prior_const_feat = 0.5 * D_feat * (jnp.log(reg) - jnp.log(2 * jnp.pi))
+                    log_prior_feat = -0.5 * reg * jnp.sum(w[1:]**2)
+                    log_prior_val = log_prior_bias + log_prior_feat + log_prior_const_feat
+                else:
+                    log_prior_val = log_prior_bias
+                
+                return jnp.sum(gs * ll_point) + log_prior_val
             
             current_dim = center.shape[0]
             n_dynamic = max(min_samples, current_dim * samples_per_dim)
@@ -354,15 +372,17 @@ def compute_factorized_evidence(
                 W = w_flat.reshape(D_in, M_out)
                 mu = x_g_flat @ W 
                 diff = y_g_flat - mu
-                
                 quad = jnp.sum((diff @ Prec_k) * diff, axis=1)
                 ll_point = -0.5 * quad - 0.5 * M_out * jnp.log(2*jnp.pi) + 0.5 * jnp.linalg.slogdet(Prec_k)[1]
-                
-                D_w = w_flat.shape[0] 
-                log_prior_const = 0.5 * D_w * (jnp.log(config.l2_reg_gauss) - jnp.log(2 * jnp.pi))
-                log_prior_val = -0.5 * config.l2_reg_gauss * jnp.sum(w_flat**2)
-                
-                return jnp.sum(gs_expanded * ll_point) + log_prior_val + log_prior_const
+                D_w = w_flat.shape[0]       
+                indices = jnp.arange(D_w)
+                row_indices = indices // M_out
+                is_bias = (row_indices == 0)
+                reg = config.l2_reg_gauss
+                log_prob_bias = -0.5 * (w_flat**2) / prior_var_emit - 0.5 * jnp.log(2 * jnp.pi * prior_var_emit)
+                log_prob_reg = -0.5 * reg * (w_flat**2) + 0.5 * (jnp.log(reg) - jnp.log(2 * jnp.pi))
+                log_prior_elements = jnp.where(is_bias, log_prob_bias, log_prob_reg)
+                return jnp.sum(gs_expanded * ll_point) + jnp.sum(log_prior_elements)
 
             current_dim = D_in*M_out
             n_dynamic = max(min_samples, current_dim * samples_per_dim)
@@ -378,7 +398,7 @@ def compute_factorized_evidence(
              center_full = params.W_multinom[:, :, k]
              D_mn, C_mn = center_full.shape
              
-             center_reduced = center_full[:, :-1]
+             center_reduced = center_full[:, :-1] - center_full[:, -1:]
              w_flat_center = center_reduced.reshape(-1)   
              gs = gammas_flat[:, k]
              y_m_onehot = jax.nn.one_hot(y_m_flat, C_mn)
@@ -393,10 +413,16 @@ def compute_factorized_evidence(
                  ll_point = jnp.sum(y_m_onehot * log_probs, axis=1)
                  
                  D_w = w_flat.shape[0] # D * (C-1)
-                 log_prior_const = 0.5 * D_w * (jnp.log(config.l2_reg_multinom) - jnp.log(2 * jnp.pi))
-                 log_prior_val = -0.5 * config.l2_reg_multinom * jnp.sum(w_flat**2)
+                 num_classes_reduced = C_mn - 1
+                 indices = jnp.arange(D_w)
+                 row_indices = indices // num_classes_reduced
+                 is_bias = (row_indices == 0)
                  
-                 return jnp.sum(gs * ll_point) + log_prior_val + log_prior_const
+                 reg = config.l2_reg_multinom
+                 log_prob_bias = -0.5 * (w_flat**2) / prior_var_emit - 0.5 * jnp.log(2 * jnp.pi * prior_var_emit)
+                 log_prob_reg = -0.5 * reg * (w_flat**2) + 0.5 * (jnp.log(reg) - jnp.log(2 * jnp.pi))
+                 log_prior_elements = jnp.where(is_bias, log_prob_bias, log_prob_reg)
+                 return jnp.sum(gs * ll_point) + jnp.sum(log_prior_elements)
 
              current_dim = D_mn*(C_mn-1)
              n_dynamic = max(min_samples, current_dim * samples_per_dim)
@@ -433,11 +459,19 @@ def compute_factorized_evidence(
                  
                  reg = config.l2_reg_negbin
                  D_w = w.shape[0]
-                 log_prior_const_w = 0.5 * D_w * (jnp.log(reg) - jnp.log(2 * jnp.pi))
-                 log_prior_w = -0.5 * reg * jnp.sum(w**2)
+                 log_prior_bias = -0.5 * (w[0]**2) / prior_var_emit - 0.5 * jnp.log(2 * jnp.pi * prior_var_emit)
+                 
+                 D_feat = D_w - 1
+                 if D_feat > 0:
+                     log_prior_const_feat = 0.5 * D_feat * (jnp.log(reg) - jnp.log(2 * jnp.pi))
+                     log_prior_feat = -0.5 * reg * jnp.sum(w[1:]**2)
+                     log_prior_w = log_prior_bias + log_prior_feat + log_prior_const_feat
+                 else:
+                     log_prior_w = log_prior_bias
+
                  log_prior_phi = -0.5 * 1.0 * (log_phi**2)
                  
-                 return jnp.sum(gs * ll_point) + log_prior_w + log_prior_const_w + log_prior_phi
+                 return jnp.sum(gs * ll_point) + log_prior_w + log_prior_phi
                  
              current_dim = D_nb+1
              n_dynamic = max(min_samples, current_dim * samples_per_dim)
@@ -474,12 +508,20 @@ def compute_factorized_evidence(
                  ll_point = t1 + t2 + t3 + t4
                  
                  reg = config.l2_reg_gamma
-                 D_w = w.shape[0]
-                 log_prior_const_w = 0.5 * D_w * (jnp.log(reg) - jnp.log(2 * jnp.pi))
-                 log_prior_w = -0.5 * reg * jnp.sum(w**2)
+                 D_w = w.shape[0]                 
+                 log_prior_bias = -0.5 * (w[0]**2) / prior_var_emit - 0.5 * jnp.log(2 * jnp.pi * prior_var_emit)
+                 
+                 D_feat = D_w - 1
+                 if D_feat > 0:
+                     log_prior_const_feat = 0.5 * D_feat * (jnp.log(reg) - jnp.log(2 * jnp.pi))
+                     log_prior_feat = -0.5 * reg * jnp.sum(w[1:]**2)
+                     log_prior_w = log_prior_bias + log_prior_feat + log_prior_const_feat
+                 else:
+                     log_prior_w = log_prior_bias
+
                  log_prior_alpha = -0.5 * 1.0 * (log_alpha**2)
                  
-                 return jnp.sum(gs * ll_point) + log_prior_w + log_prior_const_w + log_prior_alpha
+                 return jnp.sum(gs * ll_point) + log_prior_w + log_prior_alpha
 
              current_dim = D_gm+1
              n_dynamic = max(min_samples, current_dim * samples_per_dim)
@@ -575,6 +617,12 @@ def compute_factorized_evidence(
 
     total_log_Z = log_Z_init + log_Z_trans + log_Z_glm + entropy
     total_var = var_log_Z_trans + var_log_Z_glm
+    
+    print(f"  [BQ Debug K={K}] log_Z_init: {float(log_Z_init):.2f}")
+    print(f"  [BQ Debug K={K}] log_Z_trans: {float(log_Z_trans):.2f}")
+    print(f"  [BQ Debug K={K}] log_Z_glm: {float(log_Z_glm):.2f}")
+    print(f"  [BQ Debug K={K}] entropy: {float(entropy):.2f}")
+    print(f"  [BQ Debug K={K}] total: {float(total_log_Z):.2f}")
     
     return total_log_Z, total_var
 

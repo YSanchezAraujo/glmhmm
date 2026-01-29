@@ -32,7 +32,7 @@ def kmeans_init(X, K, key, max_iters=10):
             new_centers.append(center_k)
         centers = jnp.stack(new_centers)
         
-    return centers
+    return centers, assignments
 
 def initialize_params(data: GLMHMMData, config: GLMHMMConfig, seed: int = 0) -> GLMHMMParams:
     key = random.PRNGKey(seed)
@@ -60,7 +60,7 @@ def initialize_params(data: GLMHMMData, config: GLMHMMConfig, seed: int = 0) -> 
         
         if data.y_negbin is not None:
              y_flat = jnp.concatenate([y for y in data.y_negbin]) # (N,)
-             centers = kmeans_init(y_flat, K, subkey) # (K, 1)
+             centers, _ = kmeans_init(y_flat, K, subkey) # (K, 1)
              W_nb = jnp.zeros((D_nb, K))
              log_centers = jnp.log(centers.flatten() + 1e-3)
              W_nb = W_nb.at[0, :].set(log_centers)
@@ -77,7 +77,7 @@ def initialize_params(data: GLMHMMData, config: GLMHMMConfig, seed: int = 0) -> 
         
         if data.y_gamma is not None:
              y_flat = jnp.concatenate([y for y in data.y_gamma])
-             centers = kmeans_init(y_flat, K, subkey) # (K, 1)
+             centers, _ = kmeans_init(y_flat, K, subkey) # (K, 1)
              W_gamma = jnp.zeros((D_gamma, K))
              log_centers = jnp.log(centers.flatten() + 1e-3)
              W_gamma = W_gamma.at[0, :].set(log_centers)
@@ -96,7 +96,7 @@ def initialize_params(data: GLMHMMData, config: GLMHMMConfig, seed: int = 0) -> 
         if data.y_multinom is not None:
              y_flat = jnp.concatenate([y for y in data.y_multinom]) # (N_total,)
              y_onehot = jax.nn.one_hot(y_flat, C_mn) # (N, C)
-             centers = kmeans_init(y_onehot, K, subkey) # (K, C)
+             centers, _ = kmeans_init(y_onehot, K, subkey) # (K, C)
              W_multinom = jnp.zeros((D_mn, C_mn, K))
              log_probs = jnp.log(centers.T + 1e-3) # (C, K)
              W_multinom = W_multinom.at[0, :, :].set(log_probs)
@@ -110,19 +110,39 @@ def initialize_params(data: GLMHMMData, config: GLMHMMConfig, seed: int = 0) -> 
         if isinstance(data.x_gauss[0], list):
              D_gauss = data.x_gauss[0][0].shape[1]
              M_gauss = data.y_gauss[0][0].shape[1]
-             y_flat = jnp.concatenate([jnp.concatenate(seq) for seq in data.y_gauss])
+             y_flat = jnp.concatenate([jnp.concatenate(seq, axis=0) for seq in data.y_gauss], axis=0)
         else:
              D_gauss = data.x_gauss[0].shape[1]
              M_gauss = data.y_gauss[0].shape[1]
-             y_flat = jnp.concatenate([y for y in data.y_gauss])
+             y_flat = jnp.concatenate([y for y in data.y_gauss], axis=0)
 
         W_gauss = config.init_noise_scale * random.normal(subkey, (D_gauss, M_gauss, K))
         
         if data.y_gauss is not None:
-             centers = kmeans_init(y_flat, K, subkey) # (K, M)
+             centers, assignments = kmeans_init(y_flat, K, subkey) # (K, M)
+             
              for k in range(K):
                  W_gauss = W_gauss.at[0, :, k].set(centers[k])
-        
-        Sigma_gauss = jnp.tile(jnp.eye(M_gauss)[:, :, None], (1, 1, K))
+             
+             Sigma_gauss = jnp.zeros((M_gauss, M_gauss, K))
+             
+             for k in range(K):
+                 mask = (assignments == k)
+                 points_k = y_flat[mask]
+                 n_k = points_k.shape[0]
+                 
+                 if n_k < 2:
+                     cov_k = jnp.eye(M_gauss)
+                 else:
+                     cov_k = jnp.cov(points_k, rowvar=False)
+                     if cov_k.ndim == 0:
+                         cov_k = cov_k[None, None]
+                     
+                     cov_k = cov_k + 1e-4 * jnp.eye(M_gauss)
+                 
+                 Sigma_gauss = Sigma_gauss.at[:, :, k].set(cov_k)
+
+        else:
+             Sigma_gauss = jnp.tile(jnp.eye(M_gauss)[:, :, None], (1, 1, K))
 
     return GLMHMMParams(log_pi0, log_A, theta, W_bern, W_multinom, W_nb, phi_nb, W_gamma, alpha_gamma, W_gauss, Sigma_gauss)

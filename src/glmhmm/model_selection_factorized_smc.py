@@ -136,14 +136,21 @@ def compute_factorized_evidence_smc(
             center_theta_j_reduced = center_theta_j_full[:, :-1]
             
             dim_theta_j = D_trans * (K - 1)
+            prior_var_trans = config.prior_var_bias_trans
             iteration_seed = seed + 200 + j
             
             targets_j = xis_flat[:, j, :] # (N, K)
             
             def prior_theta(theta_flat):
-                reg = config.l2_reg_trans
-                scale = 1.0 / jnp.sqrt(reg)
-                return jnp.sum(stats.norm.logpdf(theta_flat, 0.0, scale))
+                dim_t = theta_flat.shape[0]
+                indices = jnp.arange(dim_t)
+                row_indices = indices // (K-1)
+                is_bias = (row_indices == 0)
+                lp_bias = jnp.sum(stats.norm.logpdf(theta_flat, 0.0, jnp.sqrt(prior_var_trans)), where=is_bias)
+                scale = 1.0 / jnp.sqrt(config.l2_reg_trans)
+                lp_reg = jnp.sum(stats.norm.logpdf(theta_flat, 0.0, scale), where=(~is_bias))
+                
+                return lp_bias + lp_reg
 
             def lik_theta(theta_flat):
                 Theta_reduced = theta_flat.reshape(D_trans, K - 1)
@@ -159,22 +166,18 @@ def compute_factorized_evidence_smc(
             logit_trans_evidence += lz
             
     else:
-        # static transitions (log_A)
         for j in range(K):
-            row_counts = counts_trans[j]
-            dim_trans = K
+            alpha_prior = jnp.ones(K)
+            if config.transition_stickiness > 0.0:
+                 alpha_prior = alpha_prior.at[j].add(config.transition_stickiness)
             
-            def prior_fn(logit_row):
-                reg = config.l2_reg_trans
-                scale = 1.0 / jnp.sqrt(reg)
-                return jnp.sum(stats.norm.logpdf(logit_row, 0.0, scale))
-
-            def lik_fn(logit_row):
-                log_probs = jax.nn.log_softmax(logit_row)
-                return jnp.dot(row_counts, log_probs)
-                
-            lz = run_smc_factor(prior_fn, lik_fn, params.log_A[j], dim_trans, num_particles, num_mcmc_steps, seed + j)
-            logit_trans_evidence += lz
+            row_counts = counts_trans[j]
+            term1 = jax.scipy.special.gammaln(jnp.sum(alpha_prior)) - jax.scipy.special.gammaln(jnp.sum(alpha_prior + row_counts))
+            term2 = jnp.sum(jax.scipy.special.gammaln(alpha_prior + row_counts) - jax.scipy.special.gammaln(alpha_prior))
+            
+            log_Z_trans += term1 + term2
+            
+        logit_trans_evidence = log_Z_trans
             
     log_Z_trans = logit_trans_evidence
 
@@ -200,14 +203,13 @@ def compute_factorized_evidence_smc(
             dim_w = center.shape[0]
             
             def prior_bern(w):
+                prior_var_emit = config.prior_var_bias_emit
+                lp_bias = jnp.sum(stats.norm.logpdf(w[0], 0.0, jnp.sqrt(prior_var_emit)))                
                 l2_lambda = config.l2_reg_bern
-                lp = jnp.sum(stats.norm.logpdf(w[0], 0.0, 10.0))
-                if l2_lambda > 0:
-                    scale = 1.0 / jnp.sqrt(l2_lambda)
-                    lp += jnp.sum(stats.norm.logpdf(w[1:], 0.0, scale))
-                else:
-                    lp += jnp.sum(stats.norm.logpdf(w[1:], 0.0, 10.0))
-                return lp
+                scale = 1.0 / jnp.sqrt(l2_lambda)
+                lp_feat = jnp.sum(stats.norm.logpdf(w[1:], 0.0, scale))
+                
+                return lp_bias + lp_feat
 
             def lik_bern(w):
                 logits = x_b_flat @ w
@@ -235,7 +237,12 @@ def compute_factorized_evidence_smc(
              def prior_gauss(w_flat):
                  reg = config.l2_reg_gauss
                  scale = 1.0 / jnp.sqrt(reg)
-                 return jnp.sum(stats.norm.logpdf(w_flat, 0.0, scale))
+                 indices = jnp.arange(dim_flat)
+                 row_indices = indices // M_out
+                 is_bias = (row_indices == 0)
+                 lp_bias = jnp.sum(stats.norm.logpdf(w_flat, 0.0, jnp.sqrt(config.prior_var_bias_emit)), where=is_bias)
+                 lp_reg = jnp.sum(stats.norm.logpdf(w_flat, 0.0, scale), where=(~is_bias))
+                 return lp_bias + lp_reg
                  
              def lik_gauss(w_flat):
                  W = w_flat.reshape(D_in, M_out)
@@ -261,7 +268,15 @@ def compute_factorized_evidence_smc(
              def prior_multinom(w_flat):
                  reg = config.l2_reg_multinom
                  scale = 1.0 / jnp.sqrt(reg)
-                 return jnp.sum(stats.norm.logpdf(w_flat, 0.0, scale))
+                 num_classes_reduced = C_mn - 1
+                 indices = jnp.arange(dim_flat)
+                 row_indices = indices // num_classes_reduced
+                 is_bias = (row_indices == 0)
+                 
+                 prior_var_emit = config.prior_var_bias_emit
+                 lp_bias = jnp.sum(stats.norm.logpdf(w_flat, 0.0, jnp.sqrt(prior_var_emit)), where=is_bias)
+                 lp_reg = jnp.sum(stats.norm.logpdf(w_flat, 0.0, scale), where=(~is_bias))
+                 return lp_bias + lp_reg
 
              def lik_multinom(w_flat):
                  W_reduced = w_flat.reshape(D_mn, C_mn - 1)
@@ -288,8 +303,11 @@ def compute_factorized_evidence_smc(
                  w = theta[:-1]
                  log_phi = theta[-1]
                  reg = config.l2_reg_negbin
-                 scale = 1.0 / jnp.sqrt(reg)
-                 lp_w = jnp.sum(stats.norm.logpdf(w, 0.0, scale))
+                 prior_var_emit = config.prior_var_bias_emit
+                 
+                 lp_w_bias = stats.norm.logpdf(w[0], 0.0, jnp.sqrt(prior_var_emit))
+                 lp_w_feat = jnp.sum(stats.norm.logpdf(w[1:], 0.0, scale))
+                 lp_w = lp_w_bias + lp_w_feat
                  lp_phi = stats.norm.logpdf(log_phi, 0.0, 1.0)
                  return lp_w + lp_phi
 
@@ -319,8 +337,12 @@ def compute_factorized_evidence_smc(
                  log_alpha = theta[-1]
                  
                  reg = config.l2_reg_gamma
-                 scale = 1.0 / jnp.sqrt(reg)
-                 lp_w = jnp.sum(stats.norm.logpdf(w, 0.0, scale))
+                 prior_var_emit = config.prior_var_bias_emit
+                 
+                 lp_w_bias = stats.norm.logpdf(w[0], 0.0, jnp.sqrt(prior_var_emit))
+                 lp_w_feat = jnp.sum(stats.norm.logpdf(w[1:], 0.0, scale))
+                 lp_w = lp_w_bias + lp_w_feat
+                 
                  lp_alpha = stats.norm.logpdf(log_alpha, 0.0, 1.0)
                  return lp_w + lp_alpha
 

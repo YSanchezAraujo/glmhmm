@@ -14,6 +14,9 @@ class GLMHMMConfig(NamedTuple):
     l2_reg_gauss: float = 1.0
     seed: int = 0
     init_noise_scale: float = 0.1
+    transition_stickiness: float = 0.0
+    prior_var_bias_emit: float = 4.0
+    prior_var_bias_trans: float = 4.0
 
 class GLMHMMParams(NamedTuple):
     # transitions
