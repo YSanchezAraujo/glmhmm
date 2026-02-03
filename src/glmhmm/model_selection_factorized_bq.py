@@ -181,12 +181,17 @@ def compute_factorized_evidence(
     config: GLMHMMConfig,
     gammas: jnp.ndarray, # (N_seq, T, K)
     xis: jnp.ndarray,    # (N_seq, T-1, K, K)
-    key: Optional[random.PRNGKey] = None
+    key: Optional[random.PRNGKey] = None,
+    static_trans_alpha: float = 1.0  # Dirichlet prior for static transitions (lower = weaker prior)
 ) -> Tuple[float, float]:
     """
     Computes total log evidence using factorization:
     log Z = log Z_trans + sum_k log Z_glm_k
     Returns: (log_evidence, var_log_evidence)
+    
+    Args:
+        static_trans_alpha: Dirichlet prior concentration for static transitions.
+            Default 1.0 (uniform). Use smaller values (e.g., 0.5) for weaker priors.
     """
     def flatten_list(l):
         if l is None: 
@@ -293,10 +298,14 @@ def compute_factorized_evidence(
              lz, var_lz = run_bq_tinygp(lp_theta, center_j, dim=current_dim, n_samples=n_dynamic, key=subkey)
              logit_trans_evidence += lz
              var_logit_trans_evidence += var_lz
-             
+         
+         # Assign the computed input-driven evidence to log_Z_trans
+         log_Z_trans = logit_trans_evidence
+         var_log_Z_trans = var_logit_trans_evidence
+              
     else:
         for j in range(K):
-            alpha_prior = jnp.ones(K)
+            alpha_prior = static_trans_alpha * jnp.ones(K)  # Configurable Dirichlet concentration
             if config.transition_stickiness > 0.0:
                  alpha_prior = alpha_prior.at[j].add(config.transition_stickiness)
             
@@ -607,11 +616,11 @@ def compute_factorized_evidence(
              n_sequences = 1
              init_counts = gammas[0]
 
-    alpha_prior = 1.0
+    alpha_prior = static_trans_alpha  # Use same prior as transitions
     term1 = jnp.sum(jax.scipy.special.gammaln(alpha_prior + init_counts))
     term2 = jax.scipy.special.gammaln(jnp.sum(alpha_prior + init_counts))
-    term3 = jnp.sum(jax.scipy.special.gammaln(alpha_prior))
-    term4 = jax.scipy.special.gammaln(jnp.sum(jnp.array([alpha_prior] * K)))
+    term3 = jnp.sum(jax.scipy.special.gammaln(jnp.array([alpha_prior] * K)))
+    term4 = jax.scipy.special.gammaln(K * alpha_prior)
     
     log_Z_init = (term1 - term2) - (term3 - term4)
 

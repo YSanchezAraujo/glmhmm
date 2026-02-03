@@ -47,26 +47,55 @@ def run_smc_factor(
     dim,
     num_particles=500,
     num_mcmc_steps=10,
-    key_seed=0
+    key_seed=0,
+    mcmc_kernel='nuts'  # 'nuts' (accurate) or 'hmc' (faster)
 ):
     """
     Runs SMC to estimate the normalizing constant (evidence) for a single factor.
-    Z = \int exp(loglikelihood_fn(theta)) * exp(logprior_fn(theta)) dtheta
+    Z = \\int exp(loglikelihood_fn(theta)) * exp(logprior_fn(theta)) dtheta
+    
+    Args:
+        logprior_fn: Log prior function
+        loglikelihood_fn: Log likelihood function  
+        initial_center: Center point for initialization
+        dim: Dimension of parameter space
+        num_particles: Number of SMC particles (default 500, use 50-100 for speed)
+        num_mcmc_steps: MCMC steps per temperature (default 10, use 3-5 for speed)
+        key_seed: Random seed
+        mcmc_kernel: 'hmc' for speed, 'nuts' for accuracy
     """
     key = jax.random.PRNGKey(key_seed)
     key, init_key = jax.random.split(key)
-    initial_particles = jax.random.normal(init_key, (num_particles, dim))
+    
+    # Initialize particles around initial_center with small noise
+    noise = jax.random.normal(init_key, (num_particles, dim)) * 0.1
+    initial_particles = initial_center + noise
+    
+    # Use step size based on dimension (heuristic from Stan)
+    step_size = 0.5 / jnp.sqrt(dim)
     
     mcmc_params = {
-        'step_size': jnp.array([1e-2]), 
+        'step_size': jnp.array([step_size]), 
         'inverse_mass_matrix': jnp.expand_dims(jnp.eye(dim), 0)
     }
+    
+    if mcmc_kernel == 'hmc':
+        # HMC with fixed trajectory length (faster than NUTS)
+        import blackjax.mcmc.hmc as hmc
+        mcmc_kernel_fn = hmc.build_kernel()
+        mcmc_init_fn = hmc.init
+        # Add num_integration_steps for HMC (must be array for blackjax)
+        mcmc_params['num_integration_steps'] = jnp.array([max(3, min(10, dim // 2))])
+    else:
+        # NUTS with adaptive trajectory (more accurate but slower)  
+        mcmc_kernel_fn = nuts.build_kernel()
+        mcmc_init_fn = nuts.init
 
     smc_loop = blackjax.adaptive_tempered_smc(
         logprior_fn=logprior_fn,
         loglikelihood_fn=loglikelihood_fn,
-        mcmc_step_fn=nuts.build_kernel(),
-        mcmc_init_fn=nuts.init,
+        mcmc_step_fn=mcmc_kernel_fn,
+        mcmc_init_fn=mcmc_init_fn,
         mcmc_parameters=mcmc_params,
         resampling_fn=resampling.systematic,
         num_mcmc_steps=num_mcmc_steps, 
@@ -82,12 +111,24 @@ def compute_factorized_evidence_smc(
     config: GLMHMMConfig,
     gammas: jnp.ndarray, 
     xis: jnp.ndarray,
-    num_particles: int = 500,
-    num_mcmc_steps: int = 20,
-    seed: int = 0
+    num_particles: int = 150,
+    num_mcmc_steps: int = 10,
+    seed: int = 0,
+    mcmc_kernel: str = 'nuts',  # 'nuts' (default, accurate) or 'hmc' (faster)
+    static_trans_alpha: float = 1.0  # Dirichlet prior for static transitions
 ):
     """
     Computes evidence using Factorized SMC.
+    
+    Speed tips:
+        - Use mcmc_kernel='hmc' (~2-5x faster than 'nuts')
+        - Reduce num_particles to 50-100 for fast approximation
+        - Reduce num_mcmc_steps to 3-5 for speed
+    
+    Args:
+        static_trans_alpha: Dirichlet prior concentration for static transitions.
+            Default 1.0 (uniform). Use smaller values (e.g., 0.5) for weaker priors.
+            MUST match the value used in compute_factorized_evidence (BQ).
     """
     K = config.num_states
     
@@ -162,12 +203,12 @@ def compute_factorized_evidence_smc(
                 
                 return jnp.sum(targets_j * log_probs)
 
-            lz = run_smc_factor(prior_theta, lik_theta, center_theta_j_reduced.flatten(), dim_theta_j, num_particles, num_mcmc_steps, iteration_seed)
+            lz = run_smc_factor(prior_theta, lik_theta, center_theta_j_reduced.flatten(), dim_theta_j, num_particles, num_mcmc_steps, iteration_seed, mcmc_kernel)
             logit_trans_evidence += lz
             
     else:
         for j in range(K):
-            alpha_prior = jnp.ones(K)
+            alpha_prior = static_trans_alpha * jnp.ones(K)  # Configurable Dirichlet concentration
             if config.transition_stickiness > 0.0:
                  alpha_prior = alpha_prior.at[j].add(config.transition_stickiness)
             
@@ -217,7 +258,7 @@ def compute_factorized_evidence_smc(
                 ll_vec = bernoulli_glmhmm_loglikelihood(x_b_flat, y_b_flat, w) 
                 return jnp.sum(gs * ll_vec.squeeze())
 
-            lz = run_smc_factor(prior_bern, lik_bern, center, dim_w, num_particles, num_mcmc_steps, iteration_seed)
+            lz = run_smc_factor(prior_bern, lik_bern, center, dim_w, num_particles, num_mcmc_steps, iteration_seed, mcmc_kernel)
             log_Z_glm += lz
             
         if valid_gauss:
@@ -250,7 +291,7 @@ def compute_factorized_evidence_smc(
                  ll_vec = gaussian_glmhmm_loglikelihoods(x_g_flat, y_g_flat, W, Sigma_k)
                  return jnp.sum(gs_expanded * ll_vec)
                  
-             lz = run_smc_factor(prior_gauss, lik_gauss, W_center.flatten(), dim_flat, num_particles, num_mcmc_steps, iteration_seed + 1)
+             lz = run_smc_factor(prior_gauss, lik_gauss, W_center.flatten(), dim_flat, num_particles, num_mcmc_steps, iteration_seed + 1, mcmc_kernel)
              log_Z_glm += lz
 
         if valid_multinom:
@@ -285,7 +326,7 @@ def compute_factorized_evidence_smc(
                  ll_vec = multinomial_glmhmm_loglikelihood(x_m_flat, y_m_flat, W_full)
                  return jnp.sum(gs * ll_vec)
              
-             lz = run_smc_factor(prior_multinom, lik_multinom, w_flat_center, dim_flat, num_particles, num_mcmc_steps, iteration_seed + 2)
+             lz = run_smc_factor(prior_multinom, lik_multinom, w_flat_center, dim_flat, num_particles, num_mcmc_steps, iteration_seed + 2, mcmc_kernel)
              log_Z_glm += lz
 
         if valid_negbin:
@@ -318,7 +359,7 @@ def compute_factorized_evidence_smc(
                  ll_vec = negbin_glmhmm_loglikelihood(x_nb_flat, y_nb_flat, w, phi)
                  return jnp.sum(gs * ll_vec)
 
-             lz = run_smc_factor(prior_negbin, lik_negbin, center_combined, dim_flat, num_particles, num_mcmc_steps, iteration_seed + 3)
+             lz = run_smc_factor(prior_negbin, lik_negbin, center_combined, dim_flat, num_particles, num_mcmc_steps, iteration_seed + 3, mcmc_kernel)
              log_Z_glm += lz
 
         if valid_gamma:
@@ -353,7 +394,7 @@ def compute_factorized_evidence_smc(
                  ll_vec = gamma_glmhmm_loglikelihood(x_gm_flat, y_gm_flat, w, alpha)
                  return jnp.sum(gs * ll_vec)
 
-             lz = run_smc_factor(prior_gamma, lik_gamma, center_combined, dim_flat, num_particles, num_mcmc_steps, iteration_seed + 4)
+             lz = run_smc_factor(prior_gamma, lik_gamma, center_combined, dim_flat, num_particles, num_mcmc_steps, iteration_seed + 4, mcmc_kernel)
              log_Z_glm += lz
     
     log_P_Y = compute_log_marginal_likelihood(params, data)
@@ -429,13 +470,20 @@ def compute_factorized_evidence_smc(
          else:
              init_counts = gammas[0]
 
-    alpha_prior = 1.0
+    alpha_prior = static_trans_alpha  # Use same prior as transitions
     term1 = jnp.sum(jax.scipy.special.gammaln(alpha_prior + init_counts))
     term2 = jax.scipy.special.gammaln(jnp.sum(alpha_prior + init_counts))
-    term3 = jnp.sum(jax.scipy.special.gammaln(alpha_prior))
-    term4 = jax.scipy.special.gammaln(jnp.sum(jnp.array([alpha_prior] * K)))
+    term3 = jnp.sum(jax.scipy.special.gammaln(jnp.array([alpha_prior] * K)))
+    term4 = jax.scipy.special.gammaln(K * alpha_prior)
     
     log_Z_init = (term1 - term2) - (term3 - term4)
     
     total_smc_evidence = log_Z_init + log_Z_trans + log_Z_glm + entropy
+    
+    print(f"  [SMC Debug K={K}] log_Z_init: {float(log_Z_init):.2f}")
+    print(f"  [SMC Debug K={K}] log_Z_trans: {float(log_Z_trans):.2f}")
+    print(f"  [SMC Debug K={K}] log_Z_glm: {float(log_Z_glm):.2f}")
+    print(f"  [SMC Debug K={K}] entropy: {float(entropy):.2f}")
+    print(f"  [SMC Debug K={K}] total: {float(total_smc_evidence):.2f}")
+    
     return total_smc_evidence
