@@ -20,7 +20,7 @@ dependencies = [
     "numpy",
     "scipy",
     "tinygp",
-    "blackjax"
+    "blackjax",
     "scikit-learn"
 ]
 
