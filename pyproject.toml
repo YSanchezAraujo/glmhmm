@@ -21,6 +21,7 @@ dependencies = [
     "scipy",
     "tinygp",
     "blackjax"
+    "scikit-learn"
 ]
 
 [project.urls]
