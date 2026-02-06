@@ -1,9 +1,12 @@
 import jax.numpy as jnp
 from collections import namedtuple
-from jax import jit, nn, random
+from jax import jit, nn, random, lax
 from typing import List, Optional, Union
 import numpy as np
 import itertools
+
+from .structs import GLMHMMParams, GLMHMMData
+
 
 def save_pickle(save_name, obj):
     with open(save_name, "wb") as file:
