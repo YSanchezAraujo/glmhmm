@@ -1,22 +1,26 @@
 
 import jax
 import jax.numpy as jnp
-from jax import random, grad, hessian, vmap, jit
-import numpy as np
-import tinygp
+from jax import random, hessian, vmap, jit
 from tinygp import kernels
-import optax
-from typing import Callable, Tuple, Optional, Any
+from typing import Callable, Tuple, Optional
 from functools import partial
 
+import warnings
+
 from .structs import GLMHMMData, GLMHMMParams, GLMHMMConfig
-from .fit import compute_log_marginal_likelihood
+from .fit import compute_log_marginal_likelihood, gauss_normalization_default
+from .m_step_utils import run_lbfgs_optimizer
+from .gaussian_evidence import (gaussian_factor_log_evidence,
+                                gaussian_sample_weights,
+                                resolve_iw_prior)
 from .emissions import (
     bernoulli_glmhmm_loglikelihood,
     multinomial_glmhmm_loglikelihood,
     negbin_glmhmm_loglikelihood,
     gamma_glmhmm_loglikelihood,
-    gaussian_glmhmm_loglikelihoods
+    gaussian_glmhmm_loglikelihoods,
+    normalized_gauss_loglikelihoods
 )
 
 @jit
@@ -27,7 +31,7 @@ def compute_kernel_expectations(
     q_mean: jnp.ndarray,      # (D,)
     q_cov: jnp.ndarray        # (D, D)
 ) -> jnp.ndarray:
-    """
+    r"""
     Computes vector z where z_i = \int k(x_i, x) q(x) dx
     """
     D = q_mean.shape[0]
@@ -62,7 +66,7 @@ def compute_prior_integral_variance(
     q_cov: jnp.ndarray,
     dim: int
 ) -> float:
-    """
+    r"""
     Computes \iint k(x, x') q(x) q(x') dx dx'
     For RBF kernel and q=N(m, S).
     Equivalent to E[k(x, x')] where x, x' ~ iid q.
@@ -94,10 +98,88 @@ def integrate_rbf_against_gaussian(
     return jnp.dot(alpha, z)
 
 
-class BQResult(Any):
-    log_evidence: float
-    bq_correction: float
-    laplace_evidence: float
+def stable_cholesky(K_mat: jnp.ndarray, base_jitter: float, max_tries: int = 8):
+    """
+    Cholesky factor of a kernel matrix, escalating the jitter until it succeeds.
+
+    A fitted lengthscale can be much larger than the default of 1, which makes the
+    Gram matrix strongly correlated and numerically indefinite at a fixed small
+    jitter. JAX returns NaN rather than raising in that case, so the failure has to
+    be detected explicitly. Growing the jitter damps the GP correction toward the
+    plain Monte Carlo mean, which is the right way to degrade.
+
+    Args:
+        K_mat: Kernel matrix, (n, n).
+        base_jitter: Starting jitter, in the units of the kernel.
+        max_tries: How many times to multiply the jitter by 10.
+
+    Returns:
+        (L, jitter_used) or (None, jitter_tried) if it never succeeded.
+    """
+    eye = jnp.eye(K_mat.shape[0], dtype=K_mat.dtype)
+    jitter = base_jitter
+    for _ in range(max_tries):
+        L = jnp.linalg.cholesky(K_mat + jitter * eye)
+        if bool(jnp.all(jnp.isfinite(L))):
+            return L, jitter
+        jitter *= 10.0
+    return None, jitter
+
+
+def fit_gp_hyperparameters(
+    z_samples: jnp.ndarray,
+    y_train: jnp.ndarray,
+    init_lengthscale: float = 1.0,
+    init_variance: float = 1.0,
+    jitter: float = 1e-5,
+    max_points: int = 512,
+    key: Optional[random.PRNGKey] = None
+) -> Tuple[float, float]:
+    """
+    Fits the RBF lengthscale and variance by maximising the GP marginal
+    likelihood, rather than leaving them at their initial values.
+
+    Fitting is done on a random subset, since each objective evaluation costs a
+    dense Cholesky and the full sample count is O(1000s).
+
+    Args:
+        z_samples: Whitened sample locations, (n, dim).
+        y_train: Centred importance ratios, (n,).
+        init_lengthscale: Starting lengthscale.
+        init_variance: Starting kernel variance.
+        jitter: Diagonal jitter.
+        max_points: Subset size used for fitting.
+        key: PRNG key for subsetting.
+
+    Returns:
+        (lengthscale, variance), both positive.
+    """
+    n = z_samples.shape[0]
+    if n > max_points:
+        if key is None:
+            key = random.PRNGKey(0)
+        idx = random.choice(key, n, shape=(max_points,), replace=False)
+        z_samples, y_train = z_samples[idx], y_train[idx]
+
+    n_fit = z_samples.shape[0]
+    eye = jnp.eye(n_fit)
+
+    def neg_log_marginal(log_params):
+        # clip to keep the Cholesky well posed under an unconstrained optimiser
+        log_ls, log_var = jnp.clip(log_params[0], -5.0, 5.0), jnp.clip(log_params[1], -5.0, 5.0)
+        var = jnp.exp(log_var)
+        K_mat = var * kernels.ExpSquared(scale=jnp.exp(log_ls))(z_samples, z_samples)
+        # jitter relative to the kernel scale, so it stays meaningful as var moves
+        K_mat = K_mat + jitter * var * eye
+        L = jnp.linalg.cholesky(K_mat)
+        a = jax.scipy.linalg.solve_triangular(L, y_train, lower=True)
+        return 0.5 * jnp.sum(a ** 2) + jnp.sum(jnp.log(jnp.diag(L))) + 0.5 * n_fit * jnp.log(2 * jnp.pi)
+
+    init = jnp.array([jnp.log(init_lengthscale), jnp.log(init_variance)])
+    fitted, _ = run_lbfgs_optimizer(neg_log_marginal, init, max_iter=100, tol=1e-4)
+    fitted = jnp.clip(fitted, -5.0, 5.0)
+    return jnp.exp(fitted[0]), jnp.exp(fitted[1])
+
 
 def run_bq_tinygp(
     log_prob_fn: Callable[[jnp.ndarray], float],
@@ -105,11 +187,32 @@ def run_bq_tinygp(
     dim: int,
     n_samples: int = 150,
     key: Optional[random.PRNGKey] = None,
-    lengthscale_init: float = 1.0
-) -> float:
-    
+    lengthscale_init: float = 1.0,
+    tune_hyperparameters: bool = True
+) -> Tuple[jnp.ndarray, jnp.ndarray, dict]:
+    """
+    Estimates a single factor's log evidence by Laplace-plus-Bayesian-quadrature.
+
+    A Laplace approximation at `center` provides the base measure; importance
+    ratios against it are then integrated with a GP quadrature rule rather than a
+    plain Monte Carlo mean.
+
+    Args:
+        log_prob_fn: Unnormalised log density of the factor.
+        center: Expansion point. Assumed to be the mode of log_prob_fn.
+        dim: Dimension of the factor.
+        n_samples: Number of importance samples.
+        key: PRNG key.
+        lengthscale_init: Initial (and, if not tuning, final) RBF lengthscale.
+        tune_hyperparameters: Fit the GP lengthscale and variance to the ratios.
+
+    Returns:
+        log_evidence, var_log_evidence, diagnostics. Diagnostics reports the
+        fraction of non-finite importance ratios that had to be sanitised and the
+        kernel hyperparameters actually used.
+    """
     if key is None: key = random.PRNGKey(0)
-    
+
     key, subkey = random.split(key)
     H = hessian(log_prob_fn)(center)
     H_reg = H - 1e-4 * jnp.eye(dim)
@@ -137,43 +240,73 @@ def run_bq_tinygp(
     
     log_ratios = log_probs - log_qs - log_z_laplace
     ratios = jnp.exp(log_ratios)
+    # a diverging importance ratio means the Laplace base measure is a poor fit;
+    # it still has to be made finite, but the caller is told how often it happened
+    n_bad = int(jnp.sum(~jnp.isfinite(ratios)))
     ratios = jnp.nan_to_num(ratios, nan=0.0, posinf=1e6, neginf=0.0)
-    
+
     mean_ratio = jnp.mean(ratios)
     y_train = ratios - mean_ratio
     z_samples = jax.scipy.linalg.solve_triangular(L_chol, (samples - center).T, lower=True).T
-    
-    kernel = kernels.ExpSquared(scale=lengthscale_init)
-    K_mat = kernel(z_samples, z_samples) + 1e-5 * jnp.eye(n_samples)
-    L_K = jnp.linalg.cholesky(K_mat)
-    alpha = jax.scipy.linalg.solve_triangular(L_K.T, jax.scipy.linalg.solve_triangular(L_K, y_train, lower=True), lower=False)
 
-    z_vec = compute_kernel_expectations(
-        kernel_variance=1.0,
-        lengthscale=jnp.array([lengthscale_init]),
-        X_train=z_samples,
-        q_mean=jnp.zeros(dim),
-        q_cov=jnp.eye(dim)
-    )
-    
-    integral_correction_z = jnp.dot(z_vec, alpha)
-    bq_integral_scaled = integral_correction_z + mean_ratio
-    
-    prior_var_integral = compute_prior_integral_variance(
-        kernel_variance=1.0,
-        lengthscale=jnp.array([lengthscale_init]),
-        q_cov=jnp.eye(dim),
-        dim=dim
-    )
-    
-    K_inv_z = jax.scipy.linalg.solve_triangular(L_K.T, jax.scipy.linalg.solve_triangular(L_K, z_vec, lower=True), lower=False)
-    var_reduction = jnp.dot(z_vec, K_inv_z)
-    posterior_var_dist = prior_var_integral - var_reduction
-    posterior_var_dist = jnp.maximum(posterior_var_dist, 0.0)
+    if tune_hyperparameters:
+        key, subkey = random.split(key)
+        lengthscale, kernel_var = fit_gp_hyperparameters(
+            z_samples, y_train, init_lengthscale=lengthscale_init, key=subkey
+        )
+    else:
+        lengthscale, kernel_var = jnp.asarray(lengthscale_init), jnp.asarray(1.0)
+
+    kernel = kernel_var * kernels.ExpSquared(scale=lengthscale)
+    K_mat = kernel(z_samples, z_samples)
+    L_K, used_jitter = stable_cholesky(K_mat, base_jitter=1e-5 * float(kernel_var))
+
+    if L_K is None:
+        # GP is unusable: fall back to plain Monte Carlo, which is what the
+        # quadrature is correcting in the first place
+        bq_integral_scaled = mean_ratio
+        posterior_var_dist = jnp.var(ratios) / n_samples
+        gp_failed = True
+    else:
+        gp_failed = False
+        alpha = jax.scipy.linalg.solve_triangular(
+            L_K.T, jax.scipy.linalg.solve_triangular(L_K, y_train, lower=True), lower=False)
+
+        z_vec = compute_kernel_expectations(
+            kernel_variance=kernel_var,
+            lengthscale=jnp.atleast_1d(lengthscale),
+            X_train=z_samples,
+            q_mean=jnp.zeros(dim),
+            q_cov=jnp.eye(dim)
+        )
+
+        integral_correction_z = jnp.dot(z_vec, alpha)
+        bq_integral_scaled = integral_correction_z + mean_ratio
+
+        prior_var_integral = compute_prior_integral_variance(
+            kernel_variance=kernel_var,
+            lengthscale=jnp.atleast_1d(lengthscale),
+            q_cov=jnp.eye(dim),
+            dim=dim
+        )
+
+        K_inv_z = jax.scipy.linalg.solve_triangular(
+            L_K.T, jax.scipy.linalg.solve_triangular(L_K, z_vec, lower=True), lower=False)
+        var_reduction = jnp.dot(z_vec, K_inv_z)
+        posterior_var_dist = prior_var_integral - var_reduction
+        posterior_var_dist = jnp.maximum(posterior_var_dist, 0.0)
     bq_val_safe = jnp.maximum(bq_integral_scaled, 1e-4)
     var_log_Z = posterior_var_dist / (bq_val_safe**2)
-    
-    return log_z_laplace + jnp.log(bq_val_safe), var_log_Z
+
+    diagnostics = {
+        "nonfinite_ratio_fraction": n_bad / n_samples,
+        "lengthscale": float(lengthscale),
+        "kernel_variance": float(kernel_var),
+        "n_samples": n_samples,
+        "gp_jitter": float(used_jitter),
+        "gp_failed": gp_failed,
+    }
+    return log_z_laplace + jnp.log(bq_val_safe), var_log_Z, diagnostics
 
 def compute_factorized_evidence(
     data: GLMHMMData,
@@ -182,17 +315,76 @@ def compute_factorized_evidence(
     gammas: jnp.ndarray, # (N_seq, T, K)
     xis: jnp.ndarray,    # (N_seq, T-1, K, K)
     key: Optional[random.PRNGKey] = None,
-    static_trans_alpha: float = 1.0  # Dirichlet prior for static transitions (lower = weaker prior)
+    static_trans_alpha: float = 1.0,  # Dirichlet prior for static transitions (lower = weaker prior)
+    min_samples: int = 2000,
+    samples_per_dim: int = 500,
+    max_samples: int = 8000,
+    tune_gp_hyperparameters: bool = True,
+    include_label_switching: bool = True,
+    verbose: bool = True
 ) -> Tuple[float, float]:
     """
-    Computes total log evidence using factorization:
-    log Z = log Z_trans + sum_k log Z_glm_k
-    Returns: (log_evidence, var_log_evidence)
-    
+    Computes total log evidence using the factorization
+
+        log Z = log Z_init + log Z_trans + sum_k log Z_glm_k + H[q(Z)]
+
+    See docs/model_and_model_selection.qmd for the derivation and for the
+    assumptions and approximations involved. In particular the per-factor
+    integrals are evaluated at *expected* latent counts, which is the dominant
+    approximation and is not a bound.
+
+    The Gaussian factor is handled analytically (matrix-normal / inverse-Wishart
+    conjugacy) rather than by quadrature, so it also integrates over Sigma.
+
     Args:
+        data: Dataset.
+        params: Fitted parameters, assumed to be at a converged MAP optimum --
+                the Laplace expansion is taken at these values.
+        config: Configuration; supplies the priors implied by the regularisation.
+        gammas: State responsibilities from the E-step.
+        xis: Transition responsibilities from the E-step.
+        key: PRNG key.
         static_trans_alpha: Dirichlet prior concentration for static transitions.
             Default 1.0 (uniform). Use smaller values (e.g., 0.5) for weaker priors.
+        min_samples: Floor on importance samples per factor.
+        samples_per_dim: Importance samples per parameter dimension.
+        max_samples: Ceiling on importance samples per factor. Quadrature costs
+            O(n^2) memory and O(n^3) time per factor per state, so this bounds
+            the dominant runtime term.
+        tune_gp_hyperparameters: Fit the quadrature kernel to the ratios instead
+            of using fixed unit lengthscale and variance.
+        include_label_switching: Add log K! to account for the K! equivalent
+            state labelings, which the mode-based factorisation covers only once.
+            Set False to compare specific labelled solutions.
+        verbose: Print the per-term breakdown.
+
+    Returns:
+        (log_evidence, var_log_evidence)
     """
+    def n_bq_samples(d):
+        return int(min(max_samples, max(min_samples, d * samples_per_dim)))
+
+    bq_warnings = []
+
+    def run_factor(fn, centre, d, subkey, label):
+        lz, var, diag = run_bq_tinygp(
+            fn, centre, dim=d, n_samples=n_bq_samples(d), key=subkey,
+            tune_hyperparameters=tune_gp_hyperparameters
+        )
+        if diag["nonfinite_ratio_fraction"] > 0.01:
+            bq_warnings.append(
+                f"{label}: {diag['nonfinite_ratio_fraction']:.1%} of importance ratios "
+                f"were non-finite; the Laplace approximation is a poor fit for this factor"
+            )
+        if diag["gp_failed"]:
+            bq_warnings.append(
+                f"{label}: GP quadrature was ill-conditioned even after jitter escalation; "
+                f"fell back to the plain Monte Carlo estimate"
+            )
+        if not bool(jnp.isfinite(lz)):
+            bq_warnings.append(f"{label}: log evidence is not finite")
+        return lz, var
+
     def flatten_list(l):
         if l is None: 
             return None
@@ -215,9 +407,7 @@ def compute_factorized_evidence(
         key = random.PRNGKey(0)
     
     K = config.num_states
-    min_samples = 2000
-    samples_per_dim = 500
-    
+
     if isinstance(xis, list):
          counts_trans = sum([jnp.sum(x, axis=0) for x in xis]) # (K, K)
     else:
@@ -229,26 +419,12 @@ def compute_factorized_evidence(
     prior_var_trans = config.prior_var_bias_trans
     prior_var_emit = config.prior_var_bias_emit
     
-    def make_log_prob_trans_row(row_counts, state_idx, prior_dim=None, row_prior_alpha=1.1):
-        def _lp(logit_row):
-            log_probs = jax.nn.log_softmax(logit_row)
-            ll = jnp.dot(row_counts, log_probs)
-            
-            D_actual = logit_row.shape[0]
-            D_prior = prior_dim if prior_dim is not None else D_actual
-            weak_prior_prec = 1.0 / prior_var_trans
-            log_prior_const = 0.5 * D_prior * (jnp.log(weak_prior_prec) - jnp.log(2 * jnp.pi))
-            prior_l2 = -0.5 * weak_prior_prec * jnp.sum(logit_row**2)
-            return ll + prior_l2 + log_prior_const
-        return _lp
-
     logit_trans_evidence = 0.0
     var_logit_trans_evidence = 0.0
     
     if data.x_trans is not None:
          logit_theta_full = params.theta # (D, K, K)
-         
-         x_trans_flat = flatten_list(data.x_trans)
+
          if isinstance(xis, list):
              x_trans_inputs = jnp.concatenate([x for x in data.x_trans], axis=0) # (N, D)
              xis_flat = jnp.concatenate(xis, axis=0) # (N, K, K)
@@ -277,25 +453,17 @@ def compute_factorized_evidence(
                  dim_t = theta_flat.shape[0]
                  indices = jnp.arange(dim_t)
                  row_indices = indices // (K-1)
-                 
+
                  is_bias = (row_indices == 0)
-                 
+
                  reg_prec = config.l2_reg_trans
-                 prior = jnp.where(is_bias, 
-                                   -0.5 * config.transition_stickiness * (theta_flat**2), 
-                                   -0.5 * reg_prec * (theta_flat**2)
-                                  )
-                 
                  log_prob_bias = -0.5 * (theta_flat**2) / prior_var_trans - 0.5 * jnp.log(2 * jnp.pi * prior_var_trans)
                  log_prob_reg = -0.5 * reg_prec * (theta_flat**2) + 0.5 * (jnp.log(reg_prec) - jnp.log(2 * jnp.pi))
                  log_prior_elements = jnp.where(is_bias, log_prob_bias, log_prob_reg)
                  
                  return ll + jnp.sum(log_prior_elements)
                  
-             current_dim = D_trans*(K-1)
-             n_dynamic = max(min_samples, current_dim * samples_per_dim)
-             
-             lz, var_lz = run_bq_tinygp(lp_theta, center_j, dim=current_dim, n_samples=n_dynamic, key=subkey)
+             lz, var_lz = run_factor(lp_theta, center_j, D_trans*(K-1), subkey, f"transitions[{j}]")
              logit_trans_evidence += lz
              var_logit_trans_evidence += var_lz
          
@@ -327,9 +495,66 @@ def compute_factorized_evidence(
     valid_bern = (params.W_bern is not None) and (x_b_flat is not None)
     valid_gauss = (params.W_gauss is not None) and (x_g_flat is not None)
 
+    # The factorization log Z = log Z_init + log Z_trans + sum_k log Z_glm_k + entropy
+    # only telescopes if every term uses the same emission log-likelihood. Resolve the
+    # Gaussian rescaling once here and apply it to the per-state factors, to the
+    # expected complete log-likelihood, and to log p(Y) alike.
+    do_normalize_gauss = (
+        config.normalize_gauss_loglik
+        if config.normalize_gauss_loglik is not None
+        else gauss_normalization_default(data)
+    )
+
+    gauss_segments = None
+    gauss_seg_lengths = None
+    if valid_gauss and data.gauss_first_idx is not None:
+        first_flat = flatten_list(data.gauss_first_idx)
+        last_flat = flatten_list(data.gauss_last_idx)
+        counts = last_flat - first_flat
+        seg_ids = jnp.repeat(jnp.arange(len(counts)), counts)
+        gauss_segments = (first_flat, last_flat, seg_ids)
+        gauss_seg_lengths = counts
+
+    def weighted_gauss_ll(ll_point, state_idx):
+        """
+        Responsibility-weighted Gaussian log-lik for one state, matching exactly
+        what compute_total_emissions contributes to the forward pass.
+        """
+        if gauss_segments is None:
+            return jnp.sum(gammas_flat[:, state_idx] * ll_point)
+        first_flat, last_flat, seg_ids = gauss_segments
+        ll_seg = normalized_gauss_loglikelihoods(
+            ll_point, first_flat, last_flat, y_g_flat.shape[1],
+            seg_ids, do_normalize_gauss
+        )
+        return jnp.sum(gammas_flat[:, state_idx] * ll_seg)
+
+    # The Gaussian factor is conjugate, so it is integrated in closed form over
+    # both W and Sigma rather than by quadrature. The matrix-normal prior used
+    # here (column covariance Sigma, row precisions Lambda) is exactly the prior
+    # the closed-form Gaussian M-step optimises against.
+    if valid_gauss:
+        M_gauss = y_g_flat.shape[1]
+        iw_scale, iw_dof = resolve_iw_prior(config, M_gauss)
+        D_gauss = x_g_flat.shape[1]
+        row_precisions = jnp.concatenate([
+            jnp.array([1.0 / config.prior_var_bias_emit]),
+            jnp.full(D_gauss - 1, config.l2_reg_gauss)
+        ])
+        seg_ids_g = gauss_segments[2] if gauss_segments is not None else None
+
     for k in range(K):
         key, subkey = random.split(key)
-        
+
+        if valid_gauss:
+            w_samples = gaussian_sample_weights(
+                gammas_flat, k, M_gauss, seg_ids_g, gauss_seg_lengths, do_normalize_gauss
+            )
+            log_Z_glm += gaussian_factor_log_evidence(
+                x_g_flat, y_g_flat, w_samples, row_precisions, iw_scale, iw_dof
+            )
+            # exact: contributes no Monte Carlo variance
+
         if valid_bern:
             center = params.W_bern[:, k]
             gs = gammas_flat[:, k]
@@ -352,54 +577,10 @@ def compute_factorized_evidence(
                 
                 return jnp.sum(gs * ll_point) + log_prior_val
             
-            current_dim = center.shape[0]
-            n_dynamic = max(min_samples, current_dim * samples_per_dim)
-            
-            lz, var_lz = run_bq_tinygp(lp_bern, center, dim=current_dim, n_samples=n_dynamic, key=subkey)
+            lz, var_lz = run_factor(lp_bern, center, center.shape[0], subkey, f"bernoulli[{k}]")
             log_Z_glm += lz
             var_log_Z_glm += var_lz
-            
-        if valid_gauss:
-            W_center = params.W_gauss[:, :, k]
-            D_in, M_out = W_center.shape
-            w_flat_center = W_center.reshape(-1)
-            
-            Sigma_k = params.Sigma_gauss[:, :, k]
-            Sigma_safe = Sigma_k + 1e-3 * jnp.eye(M_out)
-            Prec_k = jnp.linalg.inv(Sigma_safe)
-            
-            if data.gauss_first_idx is not None:
-                first_flat = flatten_list(data.gauss_first_idx)
-                last_flat = flatten_list(data.gauss_last_idx)
-                counts = last_flat - first_flat
-                seg_ids = jnp.repeat(jnp.arange(len(counts)), counts)
-                gs_expanded = gammas_flat[seg_ids, k]
-            else:
-                 gs_expanded = gammas_flat[:, k]
 
-            def lp_gauss(w_flat):
-                W = w_flat.reshape(D_in, M_out)
-                mu = x_g_flat @ W 
-                diff = y_g_flat - mu
-                quad = jnp.sum((diff @ Prec_k) * diff, axis=1)
-                ll_point = -0.5 * quad - 0.5 * M_out * jnp.log(2*jnp.pi) + 0.5 * jnp.linalg.slogdet(Prec_k)[1]
-                D_w = w_flat.shape[0]       
-                indices = jnp.arange(D_w)
-                row_indices = indices // M_out
-                is_bias = (row_indices == 0)
-                reg = config.l2_reg_gauss
-                log_prob_bias = -0.5 * (w_flat**2) / prior_var_emit - 0.5 * jnp.log(2 * jnp.pi * prior_var_emit)
-                log_prob_reg = -0.5 * reg * (w_flat**2) + 0.5 * (jnp.log(reg) - jnp.log(2 * jnp.pi))
-                log_prior_elements = jnp.where(is_bias, log_prob_bias, log_prob_reg)
-                return jnp.sum(gs_expanded * ll_point) + jnp.sum(log_prior_elements)
-
-            current_dim = D_in*M_out
-            n_dynamic = max(min_samples, current_dim * samples_per_dim)
-            
-            lz, var_lz = run_bq_tinygp(lp_gauss, w_flat_center, dim=current_dim, n_samples=n_dynamic, key=subkey)
-            log_Z_glm += lz
-            var_log_Z_glm += var_lz
-            
         if (params.W_multinom is not None) and (data.x_multinom is not None):
              x_m_flat = flatten_list(data.x_multinom)
              y_m_flat = flatten_list(data.y_multinom)
@@ -433,10 +614,7 @@ def compute_factorized_evidence(
                  log_prior_elements = jnp.where(is_bias, log_prob_bias, log_prob_reg)
                  return jnp.sum(gs * ll_point) + jnp.sum(log_prior_elements)
 
-             current_dim = D_mn*(C_mn-1)
-             n_dynamic = max(min_samples, current_dim * samples_per_dim)
-             
-             lz, var_lz = run_bq_tinygp(lp_multinom, w_flat_center, dim=current_dim, n_samples=n_dynamic, key=subkey)
+             lz, var_lz = run_factor(lp_multinom, w_flat_center, D_mn*(C_mn-1), subkey, f"multinomial[{k}]")
              log_Z_glm += lz
              var_log_Z_glm += var_lz
 
@@ -478,14 +656,11 @@ def compute_factorized_evidence(
                  else:
                      log_prior_w = log_prior_bias
 
-                 log_prior_phi = -0.5 * 1.0 * (log_phi**2)
+                 log_prior_phi = -0.5 * (log_phi**2) - 0.5 * jnp.log(2 * jnp.pi)
                  
                  return jnp.sum(gs * ll_point) + log_prior_w + log_prior_phi
                  
-             current_dim = D_nb+1
-             n_dynamic = max(min_samples, current_dim * samples_per_dim)
-             
-             lz, var_lz = run_bq_tinygp(lp_negbin, center_combined, dim=current_dim, n_samples=n_dynamic, key=subkey)
+             lz, var_lz = run_factor(lp_negbin, center_combined, D_nb+1, subkey, f"negbin[{k}]")
              log_Z_glm += lz
              var_log_Z_glm += var_lz
              
@@ -528,20 +703,17 @@ def compute_factorized_evidence(
                  else:
                      log_prior_w = log_prior_bias
 
-                 log_prior_alpha = -0.5 * 1.0 * (log_alpha**2)
+                 log_prior_alpha = -0.5 * (log_alpha**2) - 0.5 * jnp.log(2 * jnp.pi)
                  
                  return jnp.sum(gs * ll_point) + log_prior_w + log_prior_alpha
 
-             current_dim = D_gm+1
-             n_dynamic = max(min_samples, current_dim * samples_per_dim)
-             
-             lz, var_lz = run_bq_tinygp(lp_gamma, center_combined, dim=current_dim, n_samples=n_dynamic, key=subkey)
+             lz, var_lz = run_factor(lp_gamma, center_combined, D_gm+1, subkey, f"gamma[{k}]")
              log_Z_glm += lz
              var_log_Z_glm += var_lz
 
 
-    log_P_Y = compute_log_marginal_likelihood(params, data)
-    
+    log_P_Y = compute_log_marginal_likelihood(params, data, do_normalize_gauss)
+
     if isinstance(gammas, list):
          expected_ll_init = sum([jnp.sum(g[0] * params.log_pi0) for g in gammas])
     else:
@@ -578,16 +750,7 @@ def compute_factorized_evidence(
              ll_k = gaussian_glmhmm_loglikelihoods(
                  x_g_flat, y_g_flat, params.W_gauss[:, :, k], params.Sigma_gauss[:, :, k]
              )
-             if data.gauss_first_idx is not None:
-                  first_flat = flatten_list(data.gauss_first_idx)
-                  last_flat = flatten_list(data.gauss_last_idx)
-                  counts = last_flat - first_flat
-                  seg_ids = jnp.repeat(jnp.arange(len(counts)), counts)
-                  gs_expanded = gammas_flat[seg_ids, k]
-             else:
-                  gs_expanded = gammas_flat[:, k]
-                  
-             total_gauss_ll += jnp.sum(gs_expanded * ll_k)
+             total_gauss_ll += weighted_gauss_ll(ll_k, k)
          expected_ll_emit += total_gauss_ll
          
     if (params.W_multinom is not None) and (data.x_multinom is not None):
@@ -624,15 +787,25 @@ def compute_factorized_evidence(
     
     log_Z_init = (term1 - term2) - (term3 - term4)
 
-    total_log_Z = log_Z_init + log_Z_trans + log_Z_glm + entropy
+    # The factorisation expands around one labeling of the states, but the
+    # parameter posterior has K! symmetric modes; log K! restores the rest.
+    log_multiplicity = jax.scipy.special.gammaln(K + 1.0) if include_label_switching else 0.0
+
+    total_log_Z = log_Z_init + log_Z_trans + log_Z_glm + entropy + log_multiplicity
     total_var = var_log_Z_trans + var_log_Z_glm
-    
-    print(f"  [BQ Debug K={K}] log_Z_init: {float(log_Z_init):.2f}")
-    print(f"  [BQ Debug K={K}] log_Z_trans: {float(log_Z_trans):.2f}")
-    print(f"  [BQ Debug K={K}] log_Z_glm: {float(log_Z_glm):.2f}")
-    print(f"  [BQ Debug K={K}] entropy: {float(entropy):.2f}")
-    print(f"  [BQ Debug K={K}] total: {float(total_log_Z):.2f}")
-    
+
+    for msg in bq_warnings:
+        warnings.warn(f"[BQ K={K}] {msg}", RuntimeWarning)
+
+    if verbose:
+        print(f"  [BQ K={K}] log_Z_init:  {float(log_Z_init):.2f}")
+        print(f"  [BQ K={K}] log_Z_trans: {float(log_Z_trans):.2f}")
+        print(f"  [BQ K={K}] log_Z_glm:   {float(log_Z_glm):.2f}")
+        print(f"  [BQ K={K}] entropy:     {float(entropy):.2f}")
+        if include_label_switching:
+            print(f"  [BQ K={K}] log K!:      {float(log_multiplicity):.2f}")
+        print(f"  [BQ K={K}] total:       {float(total_log_Z):.2f}  (sd {float(jnp.sqrt(total_var)):.2f})")
+
     return total_log_Z, total_var
 
 

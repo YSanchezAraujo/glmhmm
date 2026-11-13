@@ -124,7 +124,7 @@ def analyze_transition_evidence():
             
             # Full BQ
             key, subkey = random.split(key)
-            log_z_bq, var_bq = run_bq_tinygp(lp_reduced, center_j, dim=current_dim, n_samples=2000, key=subkey)
+            log_z_bq, var_bq, _ = run_bq_tinygp(lp_reduced, center_j, dim=current_dim, n_samples=2000, key=subkey)
             
             print(f"\n  Row {j}:")
             print(f"    center (reduced): {center_j}")

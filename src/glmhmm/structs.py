@@ -17,6 +17,13 @@ class GLMHMMConfig(NamedTuple):
     transition_stickiness: float = 0.0
     prior_var_bias_emit: float = 4.0
     prior_var_bias_trans: float = 4.0
+    # None -> rescale the Gaussian log-lik only when another emission family is
+    # active. See gauss_normalization_default in fit.py.
+    normalize_gauss_loglik: Optional[bool] = None
+    # Inverse-Wishart prior on Sigma_gauss, used by the closed-form Gaussian
+    # evidence factor. None dof -> M + 2. Scale carries units of y_gauss squared.
+    iw_dof_gauss: Optional[float] = None
+    iw_scale_gauss: float = 1.0
 
 class GLMHMMParams(NamedTuple):
     # transitions

@@ -30,6 +30,8 @@ import optax.tree_utils as otu
 from jax.scipy.special import gammaln
 
 from .m_step_utils import run_lbfgs_optimizer, tuple_param_error_fn
+# single definition lives in utils.py; re-exported here for backwards compatibility
+from .utils import compute_A_from_theta_and_inputs
 
 @jit
 def bern_neg_loglik_with_prior(
@@ -54,7 +56,7 @@ def bern_neg_loglik_with_prior(
         Scalar negative log-likelihood value.
     """
     logits = X_bern @ w_bern_state
-    y = y_bern.astype(jnp.float32)
+    y = y_bern.astype(logits.dtype)
     nll_data = -jnp.dot(gamma_state * y, logits) + jnp.sum(gamma_state * nn.softplus(logits))
     l2_prior_feat = l2_reg * 0.5 * jnp.sum(w_bern_state[1:]**2)
     l2_prior_bias = bias_ridge * 0.5 * w_bern_state[0]**2
@@ -251,8 +253,8 @@ def negbin_neg_loglik_with_prior(
     w_state, log_phi_scalar = params
     phi_state = jnp.exp(log_phi_scalar) + 1e-6
     logits = X @ w_state
-    mu = jnp.exp(jnp.clip(logits, a_max=20.0))
-    y_float = y.astype(jnp.float32)
+    mu = jnp.exp(jnp.clip(logits, max=20.0))
+    y_float = y.astype(logits.dtype)
     term1 = gammaln(y_float + phi_state) - gammaln(y_float + 1.0) - gammaln(phi_state)
     log_p = jnp.log(phi_state) - jnp.log(phi_state + mu)
     log_1_minus_p = jnp.log(mu) - jnp.log(phi_state + mu)
@@ -332,12 +334,12 @@ def gamma_neg_loglik_with_prior(
     alpha_state = jnp.exp(log_alpha_scalar) + 1e-6
     
     logits = X @ w_state
-    log_mu = jnp.clip(logits, a_min=-10.0, a_max=20.0)
+    log_mu = jnp.clip(logits, min=-10.0, max=20.0)
     
     log_beta = log_alpha_scalar - log_mu
     beta_state = jnp.exp(log_beta)
     
-    y_float = jnp.maximum(y.astype(jnp.float32), eps)
+    y_float = jnp.maximum(y.astype(logits.dtype), eps)
     
     term1 = alpha_state * log_beta
     term2 = -gammaln(alpha_state)
@@ -471,7 +473,7 @@ def transitions_m_step_optax_reduced(
         xi: Expected transition counts, shape (T-1, K, K).
             xi[t, i, j] = P(state_t=i, state_t+1=j | observations).
         initial_theta: Initial parameters, shape (D, K, K).
-                       theta[d, i, j] = influence of feature d on i→j transition.
+                       theta[d, i, j] = influence of feature d on i->j transition.
         dir_diag: Dirichlet prior diagonal. Use jnp.ones(K) for input-driven.
         transition_ridge: L2 regularization strength.
         tol: Convergence tolerance.
@@ -500,16 +502,6 @@ def transitions_m_step_optax_reduced(
     zeros_col = jnp.zeros((optimized_theta_reduced.shape[0], optimized_theta_reduced.shape[1], 1))
     final_theta_full = jnp.concatenate([optimized_theta_reduced, zeros_col], axis=-1)
     return final_theta_full, final_state
-
-
-@jit
-def compute_A_from_theta_and_inputs(
-    U: jnp.ndarray, # (n_steps, n_features)
-    theta: jnp.ndarray # (n_features, n_states, n_states)
-):
-    logits = jnp.einsum('ij,jmn->imn', U, theta, optimize="optimal")
-    A = jax.nn.softmax(logits, axis=-1) # use -1 ?
-    return A
 
 
 @jit
@@ -632,7 +624,7 @@ def batch_full_covariance(
     return Sigma
 
 
-@partial(jax.jit, static_argnames=("p", "m", "n_states", "ridge_pen", "jitter"))
+@partial(jax.jit, static_argnames=("p", "m", "n_states", "ridge_pen", "jitter", "bias_ridge"))
 def batch_m_step_updates(
     X_gauss_set: List[jnp.ndarray],
     Y_gauss_set: List[jnp.ndarray],
@@ -641,13 +633,39 @@ def batch_m_step_updates(
     p: int,
     m: int,
     n_states: int,
-    jitter: float = 1e-3
+    jitter: float = 1e-3,
+    bias_ridge: float = 0.0
 ):
     """
     Computes M-step updates for W and Sigma for all states simultaneously.
 
+    W is the MAP estimate of a responsibility-weighted ridge regression and Sigma
+    the corresponding weighted residual covariance, both computed for every state
+    at once.
+
     Args:
-        
+        X_gauss_set: List of design matrices, each (N_i, p).
+        Y_gauss_set: List of observations, each (N_i, m).
+        gamma_set_expanded: List of responsibilities, each (N_i, n_states),
+                            already expanded to the Gaussian sample rate.
+        ridge_pen: L2 penalty on the feature rows of W (precision of a zero-mean
+                   Gaussian prior).
+        p: Number of features in X (column 0 is the bias).
+        m: Number of output dimensions in Y.
+        n_states: Number of hidden states.
+        jitter: Added to the diagonal of Sigma for positive-definiteness.
+        bias_ridge: L2 penalty on the bias row of W, i.e. 1 / prior_var_bias_emit,
+                    matching the bias prior the other emission families use. The
+                    default of 0.0 leaves the intercept unpenalised.
+
+                    NOTE: unlike the other families, whose biases are logits or
+                    log-rates and so naturally O(1), this intercept lives in the
+                    units of y_gauss. A prior variance calibrated for logits will
+                    over-shrink it if the Gaussian data is not roughly standardised.
+
+    Returns:
+        W: Weights, shape (p, m, n_states).
+        Sigma: Covariances, shape (m, m, n_states).
     """
     dtype = X_gauss_set[0].dtype
     Sz_XX_accum = jnp.zeros((p, p, n_states), dtype=dtype)
@@ -666,7 +684,7 @@ def batch_m_step_updates(
         sum_of_gamma_accum += jnp.sum(G, axis=0)
 
     ridge_penalty = ridge_pen * jnp.eye(p, dtype=dtype)
-    ridge_penalty = ridge_penalty.at[0, 0].set(0.0)
+    ridge_penalty = ridge_penalty.at[0, 0].set(bias_ridge)
     Sz_XX_final = Sz_XX_accum + ridge_penalty[..., None] # Add ridge to each state
     
     Sz_XX_final_T = jnp.moveaxis(Sz_XX_final, -1, 0) # (n_states, p, p)

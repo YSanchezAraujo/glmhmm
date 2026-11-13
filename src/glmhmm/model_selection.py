@@ -9,7 +9,7 @@ def compute_bic(data: GLMHMMData, params: GLMHMMParams, max_log_lik: float) -> f
     
     where:
     k = number of free parameters
-    n = number of observations (total time steps) (Wait, strictly BIC uses N observations. For HMM, is it num sequences or num time steps? Usually num time steps if we treat them as samples, though not i.i.d. Standard prac is T.)
+    n = len(log_liks) # Number of sequences/trials (standard approximation)
     L = maximized value of the likelihood function
     
     Args:

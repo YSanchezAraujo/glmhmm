@@ -2,20 +2,22 @@
 import jax
 import jax.numpy as jnp
 import jax.scipy.stats as stats
-from jax import flatten_util
-from functools import partial
 import blackjax
 import blackjax.smc.resampling as resampling
 import blackjax.mcmc.nuts as nuts
 
 from .structs import GLMHMMData, GLMHMMParams, GLMHMMConfig
-from .fit import compute_log_marginal_likelihood
+from .fit import compute_log_marginal_likelihood, gauss_normalization_default
+from .gaussian_evidence import (gaussian_factor_log_evidence,
+                                gaussian_sample_weights,
+                                resolve_iw_prior)
 from .emissions import (
     bernoulli_glmhmm_loglikelihood,
     multinomial_glmhmm_loglikelihood,
     negbin_glmhmm_loglikelihood,
     gamma_glmhmm_loglikelihood,
-    gaussian_glmhmm_loglikelihoods
+    gaussian_glmhmm_loglikelihoods,
+    normalized_gauss_loglikelihoods
 )
 
 def fast_smc_evidence(smc_algorithm, initial_particles, key):
@@ -23,9 +25,7 @@ def fast_smc_evidence(smc_algorithm, initial_particles, key):
     Runs the SMC loop using jax.lax.while_loop for JIT compilation.
     """
     init_state = smc_algorithm.init(initial_particles)
-    key, subk = jax.random.split(key)
-    _, info = smc_algorithm.step(subk, init_state)
-    
+
     def cond_fn(carry):
         state, _, _ = carry
         return state.tempering_param < 1.0
@@ -40,10 +40,28 @@ def fast_smc_evidence(smc_algorithm, initial_particles, key):
     final_state, _, final_evidence = jax.lax.while_loop(cond_fn, body_fn, (init_state, key, 0.0))
     return final_evidence
 
+def diagonal_gaussian_prior_sampler(scales):
+    """
+    Builds an exact sampler for a zero-mean diagonal Gaussian prior.
+
+    Every prior in this module is a product of independent zero-mean Gaussians,
+    so the prior can be sampled directly with no MCMC.
+
+    Args:
+        scales: Per-coordinate standard deviations, (dim,).
+
+    Returns:
+        Callable (key, n) -> (n, dim) samples.
+    """
+    def sampler(key, n):
+        return jax.random.normal(key, (n, scales.shape[0])) * scales
+    return sampler
+
+
 def run_smc_factor(
     logprior_fn,
     loglikelihood_fn,
-    initial_center,
+    prior_sampler,
     dim,
     num_particles=500,
     num_mcmc_steps=10,
@@ -53,11 +71,16 @@ def run_smc_factor(
     """
     Runs SMC to estimate the normalizing constant (evidence) for a single factor.
     Z = \\int exp(loglikelihood_fn(theta)) * exp(logprior_fn(theta)) dtheta
-    
+
+    The adaptive tempered SMC evidence estimator telescopes
+    Z = prod_m E_{m-1}[lik^(lambda_m - lambda_{m-1})], which is only valid when
+    the lambda = 0 population is distributed according to the prior. Particles
+    are therefore drawn from the prior, not placed at the MAP.
+
     Args:
         logprior_fn: Log prior function
-        loglikelihood_fn: Log likelihood function  
-        initial_center: Center point for initialization
+        loglikelihood_fn: Log likelihood function
+        prior_sampler: Callable (key, n) -> (n, dim) drawing exact prior samples
         dim: Dimension of parameter space
         num_particles: Number of SMC particles (default 500, use 50-100 for speed)
         num_mcmc_steps: MCMC steps per temperature (default 10, use 3-5 for speed)
@@ -66,11 +89,9 @@ def run_smc_factor(
     """
     key = jax.random.PRNGKey(key_seed)
     key, init_key = jax.random.split(key)
-    
-    # Initialize particles around initial_center with small noise
-    noise = jax.random.normal(init_key, (num_particles, dim)) * 0.1
-    initial_particles = initial_center + noise
-    
+
+    initial_particles = prior_sampler(init_key, num_particles)
+
     # Use step size based on dimension (heuristic from Stan)
     step_size = 0.5 / jnp.sqrt(dim)
     
@@ -115,20 +136,37 @@ def compute_factorized_evidence_smc(
     num_mcmc_steps: int = 10,
     seed: int = 0,
     mcmc_kernel: str = 'nuts',  # 'nuts' (default, accurate) or 'hmc' (faster)
-    static_trans_alpha: float = 1.0  # Dirichlet prior for static transitions
+    static_trans_alpha: float = 1.0,  # Dirichlet prior for static transitions
+    include_label_switching: bool = True,
+    verbose: bool = True
 ):
     """
     Computes evidence using Factorized SMC.
-    
+
+    Same decomposition as compute_factorized_evidence (BQ); see
+    docs/model_and_model_selection.qmd for the derivation, assumptions and
+    approximations. Particles for each factor are drawn from that factor's prior,
+    which is what makes the tempered-SMC normalising constant valid.
+
+    The Gaussian factor is handled analytically (matrix-normal / inverse-Wishart
+    conjugacy) rather than by SMC, so it also integrates over Sigma.
+
     Speed tips:
         - Use mcmc_kernel='hmc' (~2-5x faster than 'nuts')
         - Reduce num_particles to 50-100 for fast approximation
         - Reduce num_mcmc_steps to 3-5 for speed
-    
+
     Args:
         static_trans_alpha: Dirichlet prior concentration for static transitions.
             Default 1.0 (uniform). Use smaller values (e.g., 0.5) for weaker priors.
             MUST match the value used in compute_factorized_evidence (BQ).
+        include_label_switching: Add log K! for the K! equivalent state
+            labelings. MUST match the value used for BQ when comparing them.
+        verbose: Print the per-term breakdown.
+
+    Returns:
+        Scalar log evidence. Use compute_factorized_evidence_smc_replicated for a
+        Monte Carlo error estimate.
     """
     K = config.num_states
     
@@ -162,7 +200,6 @@ def compute_factorized_evidence_smc(
     logit_trans_evidence = 0.0
     
     if data.x_trans is not None:
-        x_trans_flat = flatten_list(data.x_trans) 
         if isinstance(xis, list):
              x_trans_inputs = jnp.concatenate([x for x in data.x_trans], axis=0)
              xis_flat = jnp.concatenate(xis, axis=0) 
@@ -173,9 +210,6 @@ def compute_factorized_evidence_smc(
         D_trans = x_trans_inputs.shape[1]
         
         for j in range(K): 
-            center_theta_j_full = params.theta[:, j, :] 
-            center_theta_j_reduced = center_theta_j_full[:, :-1]
-            
             dim_theta_j = D_trans * (K - 1)
             prior_var_trans = config.prior_var_bias_trans
             iteration_seed = seed + 200 + j
@@ -203,7 +237,14 @@ def compute_factorized_evidence_smc(
                 
                 return jnp.sum(targets_j * log_probs)
 
-            lz = run_smc_factor(prior_theta, lik_theta, center_theta_j_reduced.flatten(), dim_theta_j, num_particles, num_mcmc_steps, iteration_seed, mcmc_kernel)
+            theta_is_bias = (jnp.arange(dim_theta_j) // (K - 1)) == 0
+            theta_scales = jnp.where(theta_is_bias,
+                                     jnp.sqrt(prior_var_trans),
+                                     1.0 / jnp.sqrt(config.l2_reg_trans))
+            lz = run_smc_factor(prior_theta, lik_theta,
+                                diagonal_gaussian_prior_sampler(theta_scales),
+                                dim_theta_j, num_particles, num_mcmc_steps,
+                                iteration_seed, mcmc_kernel)
             logit_trans_evidence += lz
             
     else:
@@ -234,7 +275,51 @@ def compute_factorized_evidence_smc(
     valid_multinom = (params.W_multinom is not None) and (data.x_multinom is not None)
     valid_negbin = (params.W_negbin is not None) and (data.x_negbin is not None)
     valid_gamma = (params.W_gamma is not None) and (data.x_gamma is not None)
-    
+
+    # The factorization log Z = log Z_init + log Z_trans + sum_k log Z_glm_k + entropy
+    # only telescopes if every term uses the same emission log-likelihood. Resolve the
+    # Gaussian rescaling once here and apply it to the per-state factors, to the
+    # expected complete log-likelihood, and to log p(Y) alike.
+    do_normalize_gauss = (
+        config.normalize_gauss_loglik
+        if config.normalize_gauss_loglik is not None
+        else gauss_normalization_default(data)
+    )
+
+    gauss_segments = None
+    gauss_seg_lengths = None
+    if valid_gauss and data.gauss_first_idx is not None:
+        first_flat = flatten_list(data.gauss_first_idx)
+        last_flat = flatten_list(data.gauss_last_idx)
+        counts = last_flat - first_flat
+        seg_ids = jnp.repeat(jnp.arange(len(counts)), counts)
+        gauss_segments = (first_flat, last_flat, seg_ids)
+        gauss_seg_lengths = counts
+
+    if valid_gauss:
+        M_gauss = y_g_flat.shape[1]
+        iw_scale, iw_dof = resolve_iw_prior(config, M_gauss)
+        D_gauss = x_g_flat.shape[1]
+        row_precisions = jnp.concatenate([
+            jnp.array([1.0 / config.prior_var_bias_emit]),
+            jnp.full(D_gauss - 1, config.l2_reg_gauss)
+        ])
+        seg_ids_g = gauss_segments[2] if gauss_segments is not None else None
+
+    def weighted_gauss_ll(ll_point, state_idx):
+        """
+        Responsibility-weighted Gaussian log-lik for one state, matching exactly
+        what compute_total_emissions contributes to the forward pass.
+        """
+        if gauss_segments is None:
+            return jnp.sum(gammas_flat[:, state_idx] * ll_point)
+        first_flat, last_flat, seg_ids = gauss_segments
+        ll_seg = normalized_gauss_loglikelihoods(
+            ll_point, first_flat, last_flat, y_g_flat.shape[1],
+            seg_ids, do_normalize_gauss
+        )
+        return jnp.sum(gammas_flat[:, state_idx] * ll_seg)
+
     for k in range(K):
         iteration_seed = seed + 100 + k
         
@@ -253,46 +338,28 @@ def compute_factorized_evidence_smc(
                 return lp_bias + lp_feat
 
             def lik_bern(w):
-                logits = x_b_flat @ w
-                ll_point = bernoulli_glmhmm_loglikelihood(x_b_flat, y_b_flat, w) 
-                ll_vec = bernoulli_glmhmm_loglikelihood(x_b_flat, y_b_flat, w) 
+                ll_vec = bernoulli_glmhmm_loglikelihood(x_b_flat, y_b_flat, w)
                 return jnp.sum(gs * ll_vec.squeeze())
 
-            lz = run_smc_factor(prior_bern, lik_bern, center, dim_w, num_particles, num_mcmc_steps, iteration_seed, mcmc_kernel)
+            bern_scales = jnp.concatenate([
+                jnp.array([jnp.sqrt(config.prior_var_bias_emit)]),
+                jnp.full(dim_w - 1, 1.0 / jnp.sqrt(config.l2_reg_bern))
+            ])
+            lz = run_smc_factor(prior_bern, lik_bern,
+                                diagonal_gaussian_prior_sampler(bern_scales),
+                                dim_w, num_particles, num_mcmc_steps,
+                                iteration_seed, mcmc_kernel)
             log_Z_glm += lz
             
         if valid_gauss:
-             W_center = params.W_gauss[:, :, k]
-             D_in, M_out = W_center.shape
-             dim_flat = D_in * M_out
-             
-             if data.gauss_first_idx is not None:
-                first_flat = flatten_list(data.gauss_first_idx)
-                last_flat = flatten_list(data.gauss_last_idx)
-                counts = last_flat - first_flat
-                seg_ids = jnp.repeat(jnp.arange(len(counts)), counts)
-                gs_expanded = gammas_flat[seg_ids, k]
-             else:
-                gs_expanded = gammas_flat[:, k]
-             
-             def prior_gauss(w_flat):
-                 reg = config.l2_reg_gauss
-                 scale = 1.0 / jnp.sqrt(reg)
-                 indices = jnp.arange(dim_flat)
-                 row_indices = indices // M_out
-                 is_bias = (row_indices == 0)
-                 lp_bias = jnp.sum(stats.norm.logpdf(w_flat, 0.0, jnp.sqrt(config.prior_var_bias_emit)), where=is_bias)
-                 lp_reg = jnp.sum(stats.norm.logpdf(w_flat, 0.0, scale), where=(~is_bias))
-                 return lp_bias + lp_reg
-                 
-             def lik_gauss(w_flat):
-                 W = w_flat.reshape(D_in, M_out)
-                 Sigma_k = params.Sigma_gauss[:, :, k]
-                 ll_vec = gaussian_glmhmm_loglikelihoods(x_g_flat, y_g_flat, W, Sigma_k)
-                 return jnp.sum(gs_expanded * ll_vec)
-                 
-             lz = run_smc_factor(prior_gauss, lik_gauss, W_center.flatten(), dim_flat, num_particles, num_mcmc_steps, iteration_seed + 1, mcmc_kernel)
-             log_Z_glm += lz
+             # conjugate: integrated in closed form over both W and Sigma,
+             # so this factor needs no SMC at all
+             w_samples = gaussian_sample_weights(
+                 gammas_flat, k, M_gauss, seg_ids_g, gauss_seg_lengths, do_normalize_gauss
+             )
+             log_Z_glm += float(gaussian_factor_log_evidence(
+                 x_g_flat, y_g_flat, w_samples, row_precisions, iw_scale, iw_dof
+             ))
 
         if valid_multinom:
              x_m_flat = flatten_list(data.x_multinom)
@@ -326,17 +393,21 @@ def compute_factorized_evidence_smc(
                  ll_vec = multinomial_glmhmm_loglikelihood(x_m_flat, y_m_flat, W_full)
                  return jnp.sum(gs * ll_vec)
              
-             lz = run_smc_factor(prior_multinom, lik_multinom, w_flat_center, dim_flat, num_particles, num_mcmc_steps, iteration_seed + 2, mcmc_kernel)
+             mn_is_bias = (jnp.arange(dim_flat) // (C_mn - 1)) == 0
+             mn_scales = jnp.where(mn_is_bias,
+                                   jnp.sqrt(config.prior_var_bias_emit),
+                                   1.0 / jnp.sqrt(config.l2_reg_multinom))
+             lz = run_smc_factor(prior_multinom, lik_multinom,
+                                 diagonal_gaussian_prior_sampler(mn_scales),
+                                 dim_flat, num_particles, num_mcmc_steps,
+                                 iteration_seed + 2, mcmc_kernel)
              log_Z_glm += lz
 
         if valid_negbin:
              x_nb_flat = flatten_list(data.x_negbin)
              y_nb_flat = flatten_list(data.y_negbin)
              
-             w_center = params.W_negbin[:, k]
-             phi_center = params.phi_negbin[k]
-             center_combined = jnp.concatenate([w_center, jnp.log(jnp.array([phi_center]))])
-             D_nb = w_center.shape[0]
+             D_nb = params.W_negbin[:, k].shape[0]
              dim_flat = D_nb + 1
              gs = gammas_flat[:, k]
 
@@ -344,8 +415,9 @@ def compute_factorized_evidence_smc(
                  w = theta[:-1]
                  log_phi = theta[-1]
                  reg = config.l2_reg_negbin
+                 scale = 1.0 / jnp.sqrt(reg)
                  prior_var_emit = config.prior_var_bias_emit
-                 
+
                  lp_w_bias = stats.norm.logpdf(w[0], 0.0, jnp.sqrt(prior_var_emit))
                  lp_w_feat = jnp.sum(stats.norm.logpdf(w[1:], 0.0, scale))
                  lp_w = lp_w_bias + lp_w_feat
@@ -356,20 +428,29 @@ def compute_factorized_evidence_smc(
                  w = theta[:-1]
                  log_phi = theta[-1]
                  phi = jnp.exp(log_phi)
-                 ll_vec = negbin_glmhmm_loglikelihood(x_nb_flat, y_nb_flat, w, phi)
+                 # the shared emission fn expects (D, K) weights and (K,) dispersion;
+                 # this factor covers a single state, so promote to K=1 and drop the axis
+                 ll_vec = negbin_glmhmm_loglikelihood(
+                     x_nb_flat, y_nb_flat, w[:, jnp.newaxis], jnp.atleast_1d(phi)
+                 )[:, 0]
                  return jnp.sum(gs * ll_vec)
 
-             lz = run_smc_factor(prior_negbin, lik_negbin, center_combined, dim_flat, num_particles, num_mcmc_steps, iteration_seed + 3, mcmc_kernel)
+             nb_scales = jnp.concatenate([
+                 jnp.array([jnp.sqrt(config.prior_var_bias_emit)]),
+                 jnp.full(D_nb - 1, 1.0 / jnp.sqrt(config.l2_reg_negbin)),
+                 jnp.array([1.0])          # log phi ~ N(0, 1)
+             ])
+             lz = run_smc_factor(prior_negbin, lik_negbin,
+                                 diagonal_gaussian_prior_sampler(nb_scales),
+                                 dim_flat, num_particles, num_mcmc_steps,
+                                 iteration_seed + 3, mcmc_kernel)
              log_Z_glm += lz
 
         if valid_gamma:
              x_gm_flat = flatten_list(data.x_gamma)
              y_gm_flat = flatten_list(data.y_gamma)
              
-             w_center = params.W_gamma[:, k]
-             alpha_center = params.alpha_gamma[k]
-             center_combined = jnp.concatenate([w_center, jnp.log(jnp.array([alpha_center]))])
-             D_gm = w_center.shape[0]
+             D_gm = params.W_gamma[:, k].shape[0]
              dim_flat = D_gm + 1
              gs = gammas_flat[:, k]
 
@@ -378,8 +459,9 @@ def compute_factorized_evidence_smc(
                  log_alpha = theta[-1]
                  
                  reg = config.l2_reg_gamma
+                 scale = 1.0 / jnp.sqrt(reg)
                  prior_var_emit = config.prior_var_bias_emit
-                 
+
                  lp_w_bias = stats.norm.logpdf(w[0], 0.0, jnp.sqrt(prior_var_emit))
                  lp_w_feat = jnp.sum(stats.norm.logpdf(w[1:], 0.0, scale))
                  lp_w = lp_w_bias + lp_w_feat
@@ -391,14 +473,26 @@ def compute_factorized_evidence_smc(
                  w = theta[:-1]
                  log_alpha = theta[-1]
                  alpha = jnp.exp(log_alpha)
-                 ll_vec = gamma_glmhmm_loglikelihood(x_gm_flat, y_gm_flat, w, alpha)
+                 # single-state factor; promote to the (D, K) / (K,) shapes the
+                 # shared emission fn expects, then drop the state axis
+                 ll_vec = gamma_glmhmm_loglikelihood(
+                     x_gm_flat, y_gm_flat, w[:, jnp.newaxis], jnp.atleast_1d(alpha)
+                 )[:, 0]
                  return jnp.sum(gs * ll_vec)
 
-             lz = run_smc_factor(prior_gamma, lik_gamma, center_combined, dim_flat, num_particles, num_mcmc_steps, iteration_seed + 4, mcmc_kernel)
+             gm_scales = jnp.concatenate([
+                 jnp.array([jnp.sqrt(config.prior_var_bias_emit)]),
+                 jnp.full(D_gm - 1, 1.0 / jnp.sqrt(config.l2_reg_gamma)),
+                 jnp.array([1.0])          # log alpha ~ N(0, 1)
+             ])
+             lz = run_smc_factor(prior_gamma, lik_gamma,
+                                 diagonal_gaussian_prior_sampler(gm_scales),
+                                 dim_flat, num_particles, num_mcmc_steps,
+                                 iteration_seed + 4, mcmc_kernel)
              log_Z_glm += lz
     
-    log_P_Y = compute_log_marginal_likelihood(params, data)
-    
+    log_P_Y = compute_log_marginal_likelihood(params, data, do_normalize_gauss)
+
     if isinstance(gammas, list):
          expected_ll_init = sum([jnp.sum(g[0] * params.log_pi0) for g in gammas])
     else:
@@ -434,15 +528,7 @@ def compute_factorized_evidence_smc(
              ll_k = gaussian_glmhmm_loglikelihoods(
                  x_g_flat, y_g_flat, params.W_gauss[:, :, k], params.Sigma_gauss[:, :, k]
              )
-             if data.gauss_first_idx is not None:
-                first_flat = flatten_list(data.gauss_first_idx)
-                last_flat = flatten_list(data.gauss_last_idx)
-                counts = last_flat - first_flat
-                seg_ids = jnp.repeat(jnp.arange(len(counts)), counts)
-                gs_expanded = gammas_flat[seg_ids, k]
-             else:
-                gs_expanded = gammas_flat[:, k]
-             total_gauss_ll += jnp.sum(gs_expanded * ll_k)
+             total_gauss_ll += weighted_gauss_ll(ll_k, k)
         expected_ll_emit += total_gauss_ll
 
     if valid_multinom:
@@ -478,12 +564,69 @@ def compute_factorized_evidence_smc(
     
     log_Z_init = (term1 - term2) - (term3 - term4)
     
-    total_smc_evidence = log_Z_init + log_Z_trans + log_Z_glm + entropy
-    
-    print(f"  [SMC Debug K={K}] log_Z_init: {float(log_Z_init):.2f}")
-    print(f"  [SMC Debug K={K}] log_Z_trans: {float(log_Z_trans):.2f}")
-    print(f"  [SMC Debug K={K}] log_Z_glm: {float(log_Z_glm):.2f}")
-    print(f"  [SMC Debug K={K}] entropy: {float(entropy):.2f}")
-    print(f"  [SMC Debug K={K}] total: {float(total_smc_evidence):.2f}")
-    
+    # The factorisation expands around one labeling of the states, but the
+    # parameter posterior has K! symmetric modes; log K! restores the rest.
+    log_multiplicity = jax.scipy.special.gammaln(K + 1.0) if include_label_switching else 0.0
+
+    total_smc_evidence = log_Z_init + log_Z_trans + log_Z_glm + entropy + log_multiplicity
+
+    if verbose:
+        print(f"  [SMC K={K}] log_Z_init:  {float(log_Z_init):.2f}")
+        print(f"  [SMC K={K}] log_Z_trans: {float(log_Z_trans):.2f}")
+        print(f"  [SMC K={K}] log_Z_glm:   {float(log_Z_glm):.2f}")
+        print(f"  [SMC K={K}] entropy:     {float(entropy):.2f}")
+        if include_label_switching:
+            print(f"  [SMC K={K}] log K!:      {float(log_multiplicity):.2f}")
+        print(f"  [SMC K={K}] total:       {float(total_smc_evidence):.2f}")
+
     return total_smc_evidence
+
+
+def compute_factorized_evidence_smc_replicated(
+    data: GLMHMMData,
+    params: GLMHMMParams,
+    config: GLMHMMConfig,
+    gammas,
+    xis,
+    n_replicates: int = 5,
+    seed: int = 0,
+    verbose: bool = True,
+    **kwargs
+):
+    """
+    Runs the factorized SMC estimator several times and reports its spread.
+
+    SMC returns a stochastic estimate whose error is not available from a single
+    run, unlike BQ which reports a quadrature variance. Independent replicates
+    with different seeds give the Monte Carlo standard deviation, which is the
+    number to compare against differences in log evidence between models.
+
+    Args:
+        n_replicates: Number of independent runs.
+        seed: Base seed; replicate r uses seed + 1000 * r.
+        verbose: Print a summary (per-replicate breakdowns are suppressed).
+        **kwargs: Forwarded to compute_factorized_evidence_smc.
+
+    Returns:
+        (mean_log_evidence, std_log_evidence, all_estimates)
+    """
+    import numpy as np
+
+    estimates = []
+    for r in range(n_replicates):
+        lz = compute_factorized_evidence_smc(
+            data, params, config, gammas, xis,
+            seed=seed + 1000 * r, verbose=False, **kwargs
+        )
+        estimates.append(float(lz))
+
+    mean_lz = float(np.mean(estimates))
+    std_lz = float(np.std(estimates, ddof=1)) if n_replicates > 1 else 0.0
+
+    if verbose:
+        print(f"  [SMC K={config.num_states}] {n_replicates} replicates: "
+              f"{mean_lz:.2f} +/- {std_lz:.2f}")
+        print(f"  [SMC K={config.num_states}] estimates: "
+              f"{[round(e, 2) for e in estimates]}")
+
+    return mean_lz, std_lz, estimates

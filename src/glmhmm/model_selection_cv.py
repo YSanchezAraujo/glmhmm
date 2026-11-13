@@ -1,14 +1,15 @@
 """
 Cross-Validation Model Selection for GLM-HMM.
 
-This module provides K-fold cross-validation for model selection,
-which is more robust than evidence-based methods when priors are uncertain.
+This module implements cross-validation for GLM-HMM model selection.
+It supports:
+- Sequence-level splitting (KFold) for multiple independent sequences.
+- Temporal splitting (TimeSeriesSplit) for single long sequences.
 
-For MULTIPLE sequences: Uses sklearn's KFold to split at the sequence level.
-    Each sequence (trial/session) is treated as an independent unit.
-    
-For SINGLE sequence: Uses sklearn's TimeSeriesSplit to split temporally.
-    Train on earlier time steps, test on later ones (respects causality).
+Two scoring rules are available:
+- cross_validate_k: plug-in predictive log p(Y_test | Theta_hat_train).
+- posterior_predictive_cv: posterior predictive log p(Y_test | Y_train),
+  obtained as a difference of marginal likelihoods.
 """
 
 import numpy as np
@@ -17,7 +18,7 @@ from typing import List, Tuple, Optional, Callable, Dict
 from sklearn.model_selection import KFold, TimeSeriesSplit
 
 from .structs import GLMHMMData, GLMHMMParams, GLMHMMConfig
-from .fit import fit_glmhmm, fit_with_restarts, compute_log_marginal_likelihood
+from .fit import fit_glmhmm, fit_with_restarts, compute_log_marginal_likelihood, e_step
 
 
 def subset_data(data: GLMHMMData, indices: List[int]) -> GLMHMMData:
@@ -176,25 +177,20 @@ def cross_validate_k(
             
             train_data = slice_single_sequence(data, 0, train_end)
             test_data = slice_single_sequence(data, test_start, test_end)
-            
-            # Fit on training data
-            fold_config = GLMHMMConfig(
-                num_states=config.num_states,
-                num_em_iters=config.num_em_iters,
-                l2_reg_trans=config.l2_reg_trans,
-                l2_reg_bern=config.l2_reg_bern,
-                l2_reg_multinom=config.l2_reg_multinom,
-                l2_reg_negbin=config.l2_reg_negbin,
-                l2_reg_gamma=config.l2_reg_gamma,
-                transition_stickiness=config.transition_stickiness,
-                tol=config.tol,
+
+            # Fit on training data. _replace keeps every other config field
+            # (regularization, priors, init scale, ...) rather than silently
+            # reverting the ones not listed here to their defaults.
+            fold_config = config._replace(
                 seed=config.seed + fold_idx * 1000 if config.seed else seed + fold_idx * 1000
             )
-            
+
             params, _ = fit_with_restarts(train_data, fold_config, n_fits=n_fits)
-            
+
             # Evaluate on test data
-            test_ll = compute_log_marginal_likelihood(params, test_data)
+            test_ll = compute_log_marginal_likelihood(
+                params, test_data, config.normalize_gauss_loglik
+            )
             fold_scores.append(float(test_ll))
             
             if verbose:
@@ -212,25 +208,18 @@ def cross_validate_k(
             
             train_data = subset_data(data, list(train_idx))
             test_data = subset_data(data, list(test_idx))
-            
-            # Fit on training data
-            fold_config = GLMHMMConfig(
-                num_states=config.num_states,
-                num_em_iters=config.num_em_iters,
-                l2_reg_trans=config.l2_reg_trans,
-                l2_reg_bern=config.l2_reg_bern,
-                l2_reg_multinom=config.l2_reg_multinom,
-                l2_reg_negbin=config.l2_reg_negbin,
-                l2_reg_gamma=config.l2_reg_gamma,
-                transition_stickiness=config.transition_stickiness,
-                tol=config.tol,
+
+            # Fit on training data (see note above on _replace)
+            fold_config = config._replace(
                 seed=config.seed + fold_idx * 1000 if config.seed else seed + fold_idx * 1000
             )
-            
+
             params, _ = fit_with_restarts(train_data, fold_config, n_fits=n_fits)
-            
+
             # Evaluate on test data
-            test_ll = compute_log_marginal_likelihood(params, test_data)
+            test_ll = compute_log_marginal_likelihood(
+                params, test_data, config.normalize_gauss_loglik
+            )
             fold_scores.append(float(test_ll))
             
             if verbose:
@@ -240,6 +229,229 @@ def cross_validate_k(
     std_ll = np.std(fold_scores)
     
     return mean_ll, std_ll, fold_scores
+
+
+def _fit_and_compute_evidence(
+    data: GLMHMMData,
+    config: GLMHMMConfig,
+    n_fits: int,
+    seed: int,
+    evidence_fn: Callable,
+    evidence_kwargs: Dict
+) -> Tuple[float, float]:
+    """
+    Fits a model to `data` and returns (log_evidence, var_log_evidence).
+
+    Normalises over the two return conventions in the package: the BQ estimator
+    returns (log_Z, var) while the SMC one returns a scalar.
+    """
+    params, _ = fit_with_restarts(data, config._replace(seed=seed), n_fits=n_fits)
+    gammas, xis, _ = e_step(params, data, config.normalize_gauss_loglik)
+    out = evidence_fn(data, params, config, gammas, xis, **evidence_kwargs)
+    if isinstance(out, tuple):
+        return float(out[0]), float(out[1])
+    return float(out), 0.0
+
+
+def posterior_predictive_cv(
+    data: GLMHMMData,
+    config: GLMHMMConfig,
+    n_folds: int = 5,
+    n_fits: int = 3,
+    seed: int = 42,
+    evidence_fn: Optional[Callable] = None,
+    evidence_kwargs: Optional[Dict] = None,
+    verbose: bool = True
+) -> Tuple[float, float, List[float]]:
+    """
+    Cross-validation scored by the *posterior* predictive rather than a plug-in.
+
+    cross_validate_k reports log p(Y_test | Theta_hat), which conditions on a
+    point estimate and so ignores parameter uncertainty -- it does not penalise
+    extra states. The quantity we actually want is
+
+        log p(Y_test | Y_train)
+            = log p(Y_train, Y_test) - log p(Y_train)
+            = log Z(Y_train U Y_test) - log Z(Y_train),
+
+    a difference of marginal likelihoods, exact by definition of conditional
+    probability. Both terms are already computable, so no posterior over
+    parameters has to be represented or sampled.
+
+    Two structural benefits over the plug-in score:
+
+    - log K! cancels exactly between the two terms, so the label-switching
+      convention is irrelevant here.
+    - In the single-sequence (temporal) case the latent chain is carried across
+      the split correctly, because Z(union) is the marginal likelihood of the
+      whole prefix. The plug-in path instead restarts the test segment from pi0.
+      Both slices used here also start at index 0, which sidesteps the
+      transition-input misalignment that affects mid-sequence slices.
+
+    With multiple sequences the union is the entire dataset for every fold, so
+    log Z(union) is computed once and reused; fold scores are therefore
+    correlated through that shared term and the reported std reflects only the
+    spread of the training-set evidences.
+
+    Args:
+        data: GLMHMMData with all sequences.
+        config: GLMHMMConfig specifying the model (including num_states).
+        n_folds: Number of CV folds.
+        n_fits: Random restarts per fit.
+        seed: Base random seed.
+        evidence_fn: Marginal-likelihood estimator with signature
+            (data, params, config, gammas, xis, **kwargs). Defaults to the
+            factorized Bayesian-quadrature estimator.
+        evidence_kwargs: Extra arguments forwarded to evidence_fn.
+        verbose: Print per-fold progress.
+
+    Returns:
+        mean_score: Mean held-out log predictive density across folds.
+        std_score: Standard deviation across folds.
+        fold_scores: Per-fold log p(Y_fold | Y_rest).
+
+    NOTE: this inherits every approximation of the underlying evidence
+    estimator, above all the soft-count substitution -- see
+    docs/model_and_model_selection.qmd. It is a difference of two independently
+    approximated quantities, each of which may be large relative to the
+    difference, so errors do not cancel systematically. Check that the
+    propagated standard deviation is small next to the differences between
+    candidate K before trusting a ranking.
+    """
+    if evidence_fn is None:
+        # imported lazily so that tinygp is not required to import this module
+        from .model_selection_factorized_bq import compute_factorized_evidence
+        evidence_fn = compute_factorized_evidence
+    if evidence_kwargs is None:
+        evidence_kwargs = {"verbose": False}
+
+    n_sequences = get_num_sequences(data)
+    fold_scores: List[float] = []
+    fold_vars: List[float] = []
+
+    if n_sequences == 1:
+        seq_length = get_sequence_length(data)
+        if verbose:
+            print(f"  Single sequence (T={seq_length}), TimeSeriesSplit")
+
+        tscv = TimeSeriesSplit(n_splits=n_folds)
+        for fold_idx, (train_idx, test_idx) in enumerate(tscv.split(range(seq_length))):
+            train_end = train_idx[-1] + 1
+            test_end = test_idx[-1] + 1
+
+            train_data = slice_single_sequence(data, 0, train_end)
+            union_data = slice_single_sequence(data, 0, test_end)
+
+            lz_union, var_union = _fit_and_compute_evidence(
+                union_data, config, n_fits, seed + fold_idx * 1000,
+                evidence_fn, evidence_kwargs)
+            lz_train, var_train = _fit_and_compute_evidence(
+                train_data, config, n_fits, seed + fold_idx * 1000 + 7,
+                evidence_fn, evidence_kwargs)
+
+            fold_scores.append(lz_union - lz_train)
+            fold_vars.append(var_union + var_train)
+            if verbose:
+                print(f"  Fold {fold_idx + 1}/{n_folds}: train=[0:{train_end}] "
+                      f"test=[{train_end}:{test_end}]  "
+                      f"log p(Y_test|Y_train) = {fold_scores[-1]:.2f}")
+    else:
+        if n_sequences < n_folds:
+            raise ValueError(f"Not enough sequences ({n_sequences}) for {n_folds}-fold CV")
+
+        # union == the full dataset for every fold, so evaluate it once
+        if verbose:
+            print("  Computing log Z on the full dataset (shared across folds)...")
+        lz_full, var_full = _fit_and_compute_evidence(
+            data, config, n_fits, seed, evidence_fn, evidence_kwargs)
+        if verbose:
+            print(f"  log Z(full) = {lz_full:.2f}")
+
+        kfold = KFold(n_splits=n_folds, shuffle=True, random_state=seed)
+        for fold_idx, (train_idx, test_idx) in enumerate(kfold.split(range(n_sequences))):
+            train_data = subset_data(data, list(train_idx))
+            lz_train, var_train = _fit_and_compute_evidence(
+                train_data, config, n_fits, seed + fold_idx * 1000,
+                evidence_fn, evidence_kwargs)
+
+            fold_scores.append(lz_full - lz_train)
+            fold_vars.append(var_full + var_train)
+            if verbose:
+                print(f"  Fold {fold_idx + 1}/{n_folds}: held out {len(test_idx)} sequences  "
+                      f"log p(Y_test|Y_train) = {fold_scores[-1]:.2f}")
+
+    mean_score = float(np.mean(fold_scores))
+    std_score = float(np.std(fold_scores))
+    if verbose:
+        est_sd = float(np.sqrt(np.mean(fold_vars))) if any(fold_vars) else 0.0
+        print(f"  Mean log p(Y_test|Y_train): {mean_score:.2f} +/- {std_score:.2f} "
+              f"(estimator sd ~{est_sd:.2f})")
+
+    return mean_score, std_score, fold_scores
+
+
+def select_k_by_posterior_predictive_cv(
+    data: GLMHMMData,
+    k_range: List[int],
+    base_config: GLMHMMConfig,
+    n_folds: int = 5,
+    n_fits: int = 3,
+    seed: int = 42,
+    evidence_fn: Optional[Callable] = None,
+    evidence_kwargs: Optional[Dict] = None,
+    verbose: bool = True
+) -> Tuple[int, Dict[int, Tuple[float, float]]]:
+    """
+    Selects K by the posterior predictive CV score (higher is better).
+
+    Unlike the plug-in score, this penalises extra states automatically: the
+    marginal likelihoods it differences already contain the Occam factor.
+
+    Args:
+        data: GLMHMMData with all sequences.
+        k_range: Candidate state counts.
+        base_config: Base config; num_states and seed are overridden per K.
+        n_folds: CV folds.
+        n_fits: Restarts per fit.
+        seed: Base seed.
+        evidence_fn: See posterior_predictive_cv.
+        evidence_kwargs: See posterior_predictive_cv.
+        verbose: Print progress.
+
+    Returns:
+        best_k: K with the highest mean posterior predictive score.
+        results: Dict K -> (mean, std).
+    """
+    results = {}
+
+    if verbose:
+        print("Posterior-predictive CV  (log Z(union) - log Z(train))")
+        print(f"K values: {k_range} | folds: {n_folds} | fits: {n_fits}")
+        print("=" * 58)
+
+    for K in k_range:
+        if verbose:
+            print(f"\n--- K = {K} ---")
+        config = base_config._replace(num_states=K, seed=seed + K * 10000)
+        mean_s, std_s, _ = posterior_predictive_cv(
+            data, config, n_folds=n_folds, n_fits=n_fits, seed=seed,
+            evidence_fn=evidence_fn, evidence_kwargs=evidence_kwargs, verbose=verbose
+        )
+        results[K] = (mean_s, std_s)
+
+    best_k = max(results, key=lambda k: results[k][0])
+
+    if verbose:
+        print("\n" + "=" * 58)
+        print("POSTERIOR-PREDICTIVE CV RESULTS (higher is better)")
+        print("=" * 58)
+        for K in k_range:
+            m, s = results[K]
+            marker = " <-- BEST" if K == best_k else ""
+            print(f"K={K}: {m:.2f} +/- {s:.2f}{marker}")
+        print(f"\nSelected K: {best_k}")
+
+    return best_k, results
 
 
 def select_k_by_cv(
@@ -274,7 +486,7 @@ def select_k_by_cv(
         >>> best_k, results = select_k_by_cv(data, [2, 3, 4], config)
         >>> print(f"Best K: {best_k}")
         >>> for k, (mean, std) in results.items():
-        ...     print(f"K={k}: {mean:.2f} ± {std:.2f}")
+        ...     print(f"K={k}: {mean:.2f} +/- {std:.2f}")
     """
     cv_results = {}
     
@@ -288,19 +500,8 @@ def select_k_by_cv(
         if verbose:
             print(f"\n--- K = {K} ---")
         
-        # Create config for this K
-        config = GLMHMMConfig(
-            num_states=K,
-            num_em_iters=base_config.num_em_iters,
-            l2_reg_trans=base_config.l2_reg_trans,
-            l2_reg_bern=base_config.l2_reg_bern,
-            l2_reg_multinom=base_config.l2_reg_multinom,
-            l2_reg_negbin=base_config.l2_reg_negbin,
-            l2_reg_gamma=base_config.l2_reg_gamma,
-            transition_stickiness=base_config.transition_stickiness,
-            tol=base_config.tol,
-            seed=seed + K * 10000
-        )
+        # Create config for this K, preserving every other field of base_config
+        config = base_config._replace(num_states=K, seed=seed + K * 10000)
         
         mean_ll, std_ll, _ = cross_validate_k(
             data, config, n_folds=n_folds, n_fits=n_fits, 
@@ -322,7 +523,7 @@ def select_k_by_cv(
         for K in k_range:
             mean, std = cv_results[K]
             marker = " <-- BEST" if K == best_k else ""
-            print(f"K={K}: {mean:.2f} ± {std:.2f}{marker}")
+            print(f"K={K}: {mean:.2f} +/- {std:.2f}{marker}")
         print(f"\nSelected K: {best_k}")
     
     return best_k, cv_results

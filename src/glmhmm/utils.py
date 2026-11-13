@@ -4,9 +4,50 @@ from jax import jit, nn, random, lax
 from typing import List, Optional, Union
 import numpy as np
 import itertools
-
+import matplotlib.colors as mcolors
 from .structs import GLMHMMParams, GLMHMMData
 
+
+def plot_viterbi_with_confidence(gammas, viterbi_path, sequence_idx=0):
+    """
+    Plots the posterior probabilities (Gamma) with the Viterbi path 
+    displayed as a distinct colored ribbon at the top.
+    """
+    T, K = gammas.shape
+    time = jnp.arange(T)
+    
+    fig, ax = plt.subplots(figsize=(12, 5))
+    
+    color_list = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd'][:K]
+    
+    cmap = mcolors.ListedColormap(color_list)
+    bounds = np.arange(K + 1) - 0.5
+    norm = mcolors.BoundaryNorm(bounds, cmap.N)
+
+    for k in range(K):
+        ax.plot(time, gammas[:, k], color=color_list[k], lw=2, alpha=0.8, label=f'State {k}')
+        ax.fill_between(time, 0, gammas[:, k], color=color_list[k], alpha=0.1)
+
+    viterbi_img = np.array(viterbi_path)[None, :]
+    ax.imshow(
+        viterbi_img, 
+        aspect='auto', 
+        cmap=cmap, 
+        norm=norm, 
+        extent=[0, T, 1.02, 1.12], 
+        alpha=0.6,
+        interpolation='nearest'
+    )
+
+    ax.set_ylim(0, 1.15)
+    ax.set_xlim(0, T)
+    
+    ax.set_ylabel("State Probability")
+    ax.set_xlabel("Trial")
+    ax.set_title(f"Sequence {sequence_idx} Decoding\n(Top Bar: Viterbi Path | Curves: Posterior Confidence)")
+    
+    ax.legend(loc='center right', framealpha=0.9)
+    return fig
 
 def save_pickle(save_name, obj):
     with open(save_name, "wb") as file:
@@ -37,9 +78,17 @@ def transform_theta(theta, ref_state_ind):
     theta_prime = theta - ref_col_expanded
     return theta_prime
 
+@jit
 def compute_A_from_theta_and_inputs(x_trans: jnp.ndarray, theta: jnp.ndarray) -> jnp.ndarray:
     """
     Computes the time-varying transition matrix A_t.
+
+    Args:
+        x_trans: Transition inputs, shape (n_steps, n_features).
+        theta: Transition weights, shape (n_features, n_states, n_states).
+
+    Returns:
+        A: Transition matrices, shape (n_steps, n_states, n_states).
     """
     logits = jnp.einsum('tk,kij->tij', x_trans, theta)
     A = nn.softmax(logits, axis=-1)
@@ -305,7 +354,7 @@ def simulate_data_for_glmhmm(
             x_bias = jnp.ones((n_hmm_steps, 1))
             x_nb_seq = jnp.concatenate([x_bias, x_noise], axis=1) # (T, D)
 
-            y_nb_seq = jnp.zeros(n_hmm_steps, dtype=jnp.float32)
+            y_nb_seq = jnp.zeros(n_hmm_steps, dtype=jnp.result_type(float))
             for t in range(n_hmm_steps):
                 key, subkey_obs, subkey_pois = random.split(key, 3)
                 state = states_for_seq[t]
@@ -323,7 +372,7 @@ def simulate_data_for_glmhmm(
             x_bias = jnp.ones((n_hmm_steps, 1))
             x_gm_seq = jnp.concatenate([x_bias, x_noise], axis=1) # (T, D)
 
-            y_gm_seq = jnp.zeros(n_hmm_steps, dtype=jnp.float32)
+            y_gm_seq = jnp.zeros(n_hmm_steps, dtype=jnp.result_type(float))
             for t in range(n_hmm_steps):
                 key, subkey_obs = random.split(key)
                 state = states_for_seq[t]

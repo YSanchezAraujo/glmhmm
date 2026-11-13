@@ -1,5 +1,7 @@
+import jax
 import jax.numpy as jnp
 from jax import jit
+from functools import partial
 from tqdm import tqdm
 from typing import NamedTuple, List, Tuple, Optional
 
@@ -20,17 +22,53 @@ from .m_step import *
 from .utils import compute_A_from_theta_and_inputs
 from .initialize import initialize_params
 
-@jit
+def gauss_normalization_default(data: GLMHMMData) -> bool:
+    """
+    Whether the Gaussian log-likelihood is rescaled onto the same footing as the
+    other emission families.
+
+    When Gaussian data is fit alongside a behavioural family, each segment's summed
+    Gaussian log-likelihood is divided by the segment length and by the number of
+    regions, so that many neural samples do not swamp a single behavioural
+    observation. Override with GLMHMMConfig.normalize_gauss_loglik.
+
+    NOTE: this rescaling is a heuristic reweighting, not a likelihood. When it is
+    active, compute_log_marginal_likelihood returns a pseudo log marginal likelihood
+    rather than log p(Y). The same rescaling is applied consistently in the E-step,
+    in Viterbi decoding, and in the factorized evidence estimators, so quantities
+    are comparable across them; they are not comparable to an unnormalized fit.
+    It does not enter the closed-form Gaussian M-step, which remains a
+    responsibility-weighted ridge regression on the raw samples.
+
+    Args:
+        data: GLMHMMData object.
+
+    Returns:
+        True if any non-Gaussian emission family is present.
+    """
+    return any(
+        f is not None
+        for f in (data.x_bern, data.x_multinom, data.x_negbin, data.x_gamma)
+    )
+
+
+@partial(jit, static_argnames=("normalize_gauss",))
 def compute_total_emissions(
-    params: GLMHMMParams, 
-    x_b, y_b, 
-    x_mn, y_mn, 
-    x_nb, y_nb, 
-    x_gm, y_gm, 
-    x_gs, y_gs, gs_first, gs_last, gs_segment_ids
+    params: GLMHMMParams,
+    x_b, y_b,
+    x_mn, y_mn,
+    x_nb, y_nb,
+    x_gm, y_gm,
+    x_gs, y_gs, gs_first, gs_last, gs_segment_ids,
+    normalize_gauss: Optional[bool] = None
     ) -> jnp.ndarray:
     """
     Computes total log-likelihoods by summing across all active emission distributions.
+
+    Args:
+        normalize_gauss: Whether to rescale segmented Gaussian log-likelihoods.
+                         None (default) rescales whenever another family is active.
+                         See gauss_normalization_default.
     """
 
     if x_b is not None:
@@ -77,7 +115,7 @@ def compute_total_emissions(
         elif x_gm is not None: 
             has_other = True
         
-        do_normalize = has_other
+        do_normalize = has_other if normalize_gauss is None else normalize_gauss
         n_regions = y_gs.shape[1]
         
         if gs_first is not None:
@@ -90,13 +128,24 @@ def compute_total_emissions(
     
     return ll_total
 
-def compute_log_marginal_likelihood(params: GLMHMMParams, data: GLMHMMData) -> float:
+def compute_log_marginal_likelihood(
+    params: GLMHMMParams,
+    data: GLMHMMData,
+    normalize_gauss: Optional[bool] = None
+) -> float:
     """
     Computes the total log marginal likelihood of the data given the parameters.
     Sum of log_c from the forward pass across all sequences.
+
+    Args:
+        params: GLMHMM parameters.
+        data: Dataset containing all observation sequences and covariates.
+        normalize_gauss: Gaussian log-lik rescaling; see gauss_normalization_default.
+                         When active the return value is a pseudo log marginal
+                         likelihood rather than log p(Y).
     """
     total_lml = 0.0
-    
+
     seq_sources = [data.x_trans, data.x_bern, data.x_multinom, data.x_negbin, data.x_gamma]
 
     if data.x_gauss is not None:
@@ -138,8 +187,8 @@ def compute_log_marginal_likelihood(params: GLMHMMParams, data: GLMHMMData) -> f
             lengths = gs_last - gs_first
             gs_segment_ids = jnp.repeat(jnp.arange(n_segs), lengths)
 
-        ll_t = compute_total_emissions(params, x_b, y_b, x_mn, y_mn, x_nb, y_nb, x_gm, y_gm, x_gs, y_gs, gs_first, gs_last, gs_segment_ids)
-        
+        ll_t = compute_total_emissions(params, x_b, y_b, x_mn, y_mn, x_nb, y_nb, x_gm, y_gm, x_gs, y_gs, gs_first, gs_last, gs_segment_ids, normalize_gauss)
+
         if params.theta is not None:
             data_x_trans_i = data.x_trans[i] if data.x_trans is not None else None
 
@@ -159,17 +208,22 @@ def compute_log_marginal_likelihood(params: GLMHMMParams, data: GLMHMMData) -> f
     return total_lml
 
 
-def e_step(params: GLMHMMParams, data: GLMHMMData):
+def e_step(
+    params: GLMHMMParams,
+    data: GLMHMMData,
+    normalize_gauss: Optional[bool] = None
+):
     """
     Performs the E-step of the EM algorithm for GLMHMM.
-    
+
     Computes posterior probabilities (responsibilities) for states and transitions
     using the forward-backward algorithm. Processes all sequences in the dataset.
-    
+
     Args:
         params: Current GLMHMM parameters.
         data: Dataset containing all observation sequences and covariates.
-    
+        normalize_gauss: Gaussian log-lik rescaling; see gauss_normalization_default.
+
     Returns:
         gammas: List of state responsibilities for each sequence.
                 Each element has shape (T_i, K) where T_i is the length of sequence i.
@@ -216,8 +270,8 @@ def e_step(params: GLMHMMParams, data: GLMHMMData):
             lengths = gs_last - gs_first
             gs_segment_ids = jnp.repeat(jnp.arange(n_segs), lengths)
 
-        ll_t = compute_total_emissions(params, x_b, y_b, x_mn, y_mn, x_nb, y_nb, x_gm, y_gm, x_gs, y_gs, gs_first, gs_last, gs_segment_ids)
-        
+        ll_t = compute_total_emissions(params, x_b, y_b, x_mn, y_mn, x_nb, y_nb, x_gm, y_gm, x_gs, y_gs, gs_first, gs_last, gs_segment_ids, normalize_gauss)
+
         if params.theta is not None:
             data_x_trans_i = data.x_trans[i] if data.x_trans is not None else None
             A_t = compute_A_from_theta_and_inputs(data_x_trans_i, params.theta)
@@ -326,8 +380,8 @@ def m_step(
          K = params.log_pi0.shape[0]
          
          new_W_gauss, new_Sigma_gauss = batch_m_step_updates(
-             x_gs_list, y_gs_list, expanded_gammas, 
-             config.l2_reg_gauss, D_g, M_g, K
+             x_gs_list, y_gs_list, expanded_gammas,
+             config.l2_reg_gauss, D_g, M_g, K, bias_ridge=bias_ridge_emit
          )
 
     new_theta, new_log_A = params.theta, params.log_A
@@ -438,9 +492,10 @@ def fit_glmhmm(
             - log_A or theta: Transition parameters
             - W_*: Emission weights for each active distribution
             - phi_negbin, alpha_gamma: Dispersion parameters if applicable
-        lml_history: List of log marginal likelihoods at each EM iteration.
-                     Can be used to diagnose convergence.
-    
+        lml_history: List of log marginal likelihoods, one per EM iteration plus a
+                     final entry scoring the returned parameters. lml_history[-1]
+                     therefore always corresponds to the params that are returned.
+
     Example:
         >>> data = GLMHMMData(x_bern=[X1, X2], y_bern=[y1, y2], ...)
         >>> config = GLMHMMConfig(num_states=3, num_em_iters=100, l2_reg_bern=1.0)
@@ -448,24 +503,40 @@ def fit_glmhmm(
     """
     _validate_data_shapes(data)
 
+    normalize_gauss = config.normalize_gauss_loglik
+
     if initial_params is None:
         params = initialize_params(data, config, seed=config.seed)
     else:
         params = initial_params
     lml_history = []
-    
+    converged = False
+
     print("Starting EM...")
     for epoch in tqdm(range(config.num_em_iters)):
 
-        gammas, xis, lml = e_step(params, data)
-        
-        if epoch > config.min_em_iters and abs(lml - lml_history[-1]) < config.tol:
+        gammas, xis, lml = e_step(params, data, normalize_gauss)
+
+        # record before breaking, so the final LML always reaches the history
+        converged = (
+            epoch > config.min_em_iters
+            and abs(lml - lml_history[-1]) < config.tol
+        )
+        lml_history.append(lml)
+
+        if converged:
             print(f"Converged at epoch {epoch}")
             break
-        lml_history.append(lml)
-        
+
         params = m_step(params, data, gammas, xis, config)
-    
+
+    if not converged:
+        # the loop exited straight after an M-step (or never ran), so the last
+        # recorded LML predates the returned params; score them explicitly
+        lml_history.append(
+            compute_log_marginal_likelihood(params, data, normalize_gauss)
+        )
+
     if params.theta is not None:
         params = params._replace(log_A=None)
         

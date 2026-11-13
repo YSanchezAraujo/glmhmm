@@ -11,7 +11,7 @@ Available functions:
 """
 import jax.numpy as jnp
 from jax import jit, lax
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from .structs import GLMHMMParams, GLMHMMData
 from .fit import compute_total_emissions
@@ -69,21 +69,24 @@ def viterbi_core(
 
 
 def viterbi(
-    params: GLMHMMParams, 
-    data: GLMHMMData, 
-    sequence_idx: int = 0
+    params: GLMHMMParams,
+    data: GLMHMMData,
+    sequence_idx: int = 0,
+    normalize_gauss: Optional[bool] = None
 ) -> jnp.ndarray:
     """
     Viterbi decoding: finds the most likely state sequence for a specific session.
-    
+
     Handles all emission types (Bernoulli, Gaussian, Multinomial, NegBin, Gamma)
     automatically by using compute_total_emissions.
-    
+
     Args:
         params: Fitted GLMHMMParams
         data: GLMHMMData containing observations
         sequence_idx: Which sequence to decode (default 0)
-    
+        normalize_gauss: Gaussian log-lik rescaling; see gauss_normalization_default.
+                         Pass the same value used when fitting.
+
     Returns:
         best_path: Most likely state sequence, shape (T,) of integers
     
@@ -121,8 +124,8 @@ def viterbi(
             gs_segment_ids = jnp.repeat(jnp.arange(n_segs), lengths)
 
     ll_t = compute_total_emissions(
-        params, x_b, y_b, x_mn, y_mn, x_nb, y_nb, x_gm, y_gm, 
-        x_gs, y_gs, gs_first, gs_last, gs_segment_ids
+        params, x_b, y_b, x_mn, y_mn, x_nb, y_nb, x_gm, y_gm,
+        x_gs, y_gs, gs_first, gs_last, gs_segment_ids, normalize_gauss
     )
 
     if params.theta is not None and data.x_trans is not None:
@@ -136,14 +139,19 @@ def viterbi(
     return best_path
 
 
-def viterbi_all_sequences(params: GLMHMMParams, data: GLMHMMData) -> List[jnp.ndarray]:
+def viterbi_all_sequences(
+    params: GLMHMMParams,
+    data: GLMHMMData,
+    normalize_gauss: Optional[bool] = None
+) -> List[jnp.ndarray]:
     """
     Run Viterbi on all sequences in the data.
-    
+
     Args:
         params: Fitted GLMHMMParams
         data: GLMHMMData with multiple sequences
-    
+        normalize_gauss: Gaussian log-lik rescaling; see gauss_normalization_default.
+
     Returns:
         List of state sequences, one per sequence in data
     """
@@ -154,4 +162,4 @@ def viterbi_all_sequences(params: GLMHMMParams, data: GLMHMMData) -> List[jnp.nd
     else:
         n_sequences = next((len(s) for s in seq_sources if s is not None), 0)
     
-    return [viterbi(params, data, i) for i in range(n_sequences)]
+    return [viterbi(params, data, i, normalize_gauss) for i in range(n_sequences)]

@@ -1,0 +1,804 @@
+---
+title: "GLM-HMM: model, inference, and model selection"
+subtitle: "Mathematical specification, with assumptions and approximations made explicit"
+author: "glmhmm"
+date: last-modified
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    html-math-method: mathjax
+    code-fold: false
+---
+
+## Scope
+
+This document specifies the mathematics of the model as **implemented in this
+package**, not the mathematics of GLM-HMMs in general. Where the code makes an
+assumption or an approximation, it is flagged inline as:
+
+> **[A]** an *assumption* — something taken to be true about the data or the
+> model, which the code does not check.
+>
+> **[X]** an *approximation* — a quantity the code replaces with something
+> cheaper, incurring an error.
+
+The short answer to "is the model selection code an approximation?" is: **yes, at
+several independent levels**, and the factorized evidence estimators (BQ and SMC)
+are approximations of an approximation. @sec-summary tabulates every one.
+
+Notation: $K$ hidden states, $S$ independent sequences, sequence $i$ of length
+$T_i$. Superscripts for sequence index are dropped where unambiguous.
+
+---
+
+## The generative model
+
+### Latent chain
+
+A discrete-state Markov chain $z_{1:T}$, $z_t \in \{1,\dots,K\}$:
+
+$$
+z_1 \sim \mathrm{Cat}(\pi_0), \qquad
+z_{t+1} \mid z_t = i \;\sim\; \mathrm{Cat}\big(A_t[i,\cdot]\big).
+$$
+
+The package stores $\log \pi_0$ directly. Transitions come in two forms.
+
+**Static.** A single row-stochastic $A \in \mathbb{R}^{K\times K}$, stored as
+$\log A$.
+
+**Input-driven.** Given transition covariates $u_t \in \mathbb{R}^{D_u}$ and
+parameters $\theta \in \mathbb{R}^{D_u \times K \times K}$,
+
+$$
+A_t[i,j] \;=\; \frac{\exp\big(u_t^\top \theta[:,i,j]\big)}
+                    {\sum_{j'} \exp\big(u_t^\top \theta[:,i,j']\big)} .
+$$
+
+Each source state $i$ has its own multinomial logistic regression over
+destinations. For identifiability the last destination is the reference
+category, $\theta[:,i,K] = 0$; the M-step enforces this exactly.
+
+> **[A] Transition input alignment.** $u_t$ indexes the *transition* $t \to
+> t+1$, so $u$ has length $T-1$ for a sequence of $T$ observations. This is
+> checked by `_validate_data_shapes` at fit time. Downstream entry points
+> (`compute_log_marginal_likelihood`, `viterbi`) do **not** re-check it.
+
+Which form is used is decided by whether `data.x_trans` is present — there is no
+separate flag.
+
+### Emissions
+
+Given $z_t = k$, the observation at $t$ may consist of several modalities. The
+package supports five families; any subset may be active simultaneously.
+
+Let $x_t^{f}$ be the covariates for family $f$ and $W^f_{:,k}$ its weights for
+state $k$. With $\sigma(\cdot)$ the logistic function:
+
+| Family | Density | Link | Extra parameter |
+|---|---|---|---|
+| Bernoulli | $y^{\,y}(1-y)^{1-y}$, $p = \sigma(x^\top w_k)$ | logit | — |
+| Multinomial | $\mathrm{Cat}\big(\mathrm{softmax}(x^\top W_k)\big)$ | softmax | — |
+| Neg. binomial | $\mathrm{NB}(\mu_k, \phi_k)$, $\mu_k = e^{x^\top w_k}$ | log | dispersion $\phi_k$ |
+| Gamma | $\mathrm{Gamma}(\alpha_k, \beta_k)$, $\beta_k = \alpha_k/\mu_k$, $\mu_k = e^{x^\top w_k}$ | log | shape $\alpha_k$ |
+| Gaussian | $\mathcal{N}(x^\top W_k, \Sigma_k)$, $y \in \mathbb{R}^M$ | identity | covariance $\Sigma_k$ |
+
+Explicitly, the negative binomial is parameterized by mean and dispersion,
+
+$$
+\log p(y \mid \mu, \phi) = \log\Gamma(y+\phi) - \log\Gamma(y+1) - \log\Gamma(\phi)
+ + \phi \log\!\frac{\phi}{\phi+\mu} + y \log\!\frac{\mu}{\phi+\mu},
+$$
+
+and the Gamma uses a mean parameterization with state-specific shape,
+
+$$
+\log p(y \mid \alpha, \mu) = \alpha\log\beta - \log\Gamma(\alpha)
+ + (\alpha-1)\log y - \beta y, \qquad \beta = \alpha/\mu .
+$$
+
+Multinomial weights use the last category as reference, $W^{\text{mn}}[:,C,:] = 0$.
+
+> **[A] Conditional independence across families.** Given $z_t$, the active
+> modalities are independent, so their log-likelihoods **add**:
+> $$\log p(y_t \mid z_t=k) = \sum_f \log p_f\big(y_t^f \mid x_t^f, W^f_{:,k}\big).$$
+> This is what `compute_total_emissions` computes. Any residual correlation
+> between, say, choice and neural activity beyond what the shared state explains
+> is not modelled.
+
+> **[A] Numerical guards change the model in the tails.** Log-link means are
+> clipped: $\log\mu \le 20$ (neg. binomial) and $\log\mu \in [-10, 20]$ (Gamma).
+> Inside the clipped region the gradient is exactly zero, so a state whose fitted
+> rate saturates will stop moving rather than diverge.
+
+### Gaussian data at a different sampling rate {#sec-gauss-rate}
+
+Gaussian observations may arrive faster than the latent chain evolves — e.g.
+many neural samples per behavioural trial. Sample $s$ belongs to HMM step $t$,
+given by index arrays `gauss_first_idx` / `gauss_last_idx`, so that step $t$ owns
+samples $[\,\mathrm{first}_t,\ \mathrm{last}_t)$ of length $L_t$.
+
+The step-level contribution is the **sum** over its segment:
+
+$$
+\ell^{\text{gauss}}_t(k) \;=\; \sum_{s \in \text{seg}(t)}
+   \log \mathcal{N}\big(y_s \mid x_s^\top W_k,\ \Sigma_k\big).
+$$
+
+> **[A] Segments are contiguous, in order, and tile the array from index 0.**
+> The implementation builds segment identifiers from the segment *lengths*
+> (`repeat(arange(n_seg), last - first)`) and never uses the *positions*
+> `first`/`last` themselves. Contiguous ordered segments — the documented layout
+> — are handled correctly. Segments supplied out of order are silently
+> mis-assigned; segments with gaps make the lengths fail to sum to $N$ and raise.
+> **It is the caller's responsibility to supply ordered, contiguous indices.**
+
+### The Gaussian rescaling heuristic {#sec-gauss-norm}
+
+> **[X] Pseudo-likelihood reweighting.** When Gaussian data is fit *alongside*
+> another family, each segment's summed log-likelihood is divided by its length
+> and by the number of channels $M$:
+> $$
+> \tilde{\ell}^{\text{gauss}}_t(k) = \frac{1}{L_t\,M}\sum_{s \in \text{seg}(t)}
+> \log \mathcal{N}\big(y_s \mid x_s^\top W_k, \Sigma_k\big).
+> $$
+> This stops $L_t M$ neural terms from swamping a single binary choice. It is
+> **not** a likelihood: with it active, everything downstream — the "LML", BIC,
+> CV scores, and the evidence estimates — is a pseudo-likelihood quantity.
+> Values are comparable to each other but not to an unrescaled fit.
+>
+> Controlled by `GLMHMMConfig.normalize_gauss_loglik`; `None` (default) enables
+> it exactly when another family is present. It applies to the E-step, the
+> forward pass, Viterbi and both evidence estimators, but **not** to the Gaussian
+> M-step, which remains a responsibility-weighted ridge on the raw samples. The
+> weight $1/(L_t M)$ is fixed; there is no tunable modality-balance parameter.
+
+### Joint density
+
+$$
+p(y_{1:T}, z_{1:T} \mid \Theta) = \pi_0[z_1]\;
+\prod_{t=1}^{T-1} A_t[z_t, z_{t+1}] \;
+\prod_{t=1}^{T} \prod_f p_f\big(y^f_t \mid x^f_t, W^f_{:,z_t}\big),
+$$
+
+with $\Theta = \{\pi_0,\ \theta \text{ or } A,\ W^f,\ \phi,\ \alpha,\ \Sigma\}$.
+Sequences are assumed independent, so log-likelihoods add across them.
+
+---
+
+## Inference
+
+### Forward–backward
+
+Both passes run in log space with per-step normalization. With
+$\ell_t(k) = \log p(y_t \mid z_t = k)$:
+
+$$
+\log\alpha_1 = \ell_1 + \log\pi_0 - c_1, \qquad
+\log\alpha_t = \ell_t + \log\!\!\sum_i \exp\big(\log A_{t-1}[i,\cdot] + \log\alpha_{t-1}[i]\big) - c_t,
+$$
+
+where $c_t$ is the log normalizer of the bracket, so each $\alpha_t$ sums to 1.
+The **exact** log marginal likelihood is then
+
+$$
+\log p(y_{1:T}\mid\Theta) = \sum_{t=1}^{T} c_t .
+$$
+
+The backward pass uses the same scaling constants, and
+
+$$
+\gamma_t(k) = \frac{\alpha_t(k)\beta_t(k)}{\sum_{k'}\alpha_t(k')\beta_t(k')}, \qquad
+\xi_t(i,j) = \alpha_t(i)\,A_t[i,j]\,p(y_{t+1}\mid j)\,\beta_{t+1}(j)\,e^{-c_{t+1}} .
+$$
+
+There are **no approximations here**: these are exact given $\Theta$, and the
+implementation was verified against exhaustive enumeration of all $K^T$ paths
+(agreement to $\sim10^{-16}$), including the marginalization identities
+$\sum_j \xi_t(i,j) = \gamma_t(i)$ and $\sum_i \xi_t(i,j) = \gamma_{t+1}(j)$.
+
+### Viterbi
+
+Exact max-product recursion with backtracking; verified against exhaustive
+argmax over all paths. Note this returns the single most likely *path*, which is
+generally not the sequence of per-step marginal modes $\arg\max_k \gamma_t(k)$.
+
+---
+
+## Learning: MAP-EM
+
+### Objective
+
+The package does **not** compute a maximum-likelihood fit. The L2 penalties are
+Gaussian priors, so `fit_glmhmm` performs MAP-EM, ascending
+
+$$
+\mathcal{F}(\Theta) \;=\; \log p(Y \mid \Theta) \;+\; \log p(\Theta),
+$$
+
+with the implied prior, per emission family and per state,
+
+$$
+w_0 \sim \mathcal{N}\!\big(0,\ \texttt{prior\_var\_bias\_emit}\big), \qquad
+w_{d>0} \sim \mathcal{N}\!\big(0,\ 1/\texttt{l2\_reg\_}f\big),
+$$
+
+and the analogous pair (`prior_var_bias_trans`, `l2_reg_trans`) for $\theta$.
+**Column 0 of every design matrix is assumed to be the bias.** This convention is
+load-bearing: the evidence code reconstructs "which entries are bias" from
+flattened index arithmetic.
+
+The Gaussian family is the exception to the isotropic form above. Its closed-form
+M-step implies a *matrix-normal* prior whose column covariance is the noise
+covariance itself,
+$W_k \mid \Sigma_k \sim \mathcal{MN}(0, \Lambda^{-1}, \Sigma_k)$ with
+$\Lambda = \mathrm{diag}(\rho)$,
+$\rho_0 = 1/\texttt{prior\_var\_bias\_emit}$ and
+$\rho_{d>0} = \texttt{l2\_reg\_gauss}$. @sec-gauss-exact uses exactly this prior,
+so the fit and the evidence describe the same model.
+
+The initial-state update uses a $\mathrm{Dir}(1.0001)$ prior (essentially flat,
+for numerical safety).
+
+### EM {#sec-em}
+
+**E-step** — exact posteriors $\gamma, \xi$ from forward–backward, as above.
+
+**M-step** — maximize $\mathbb{E}_q[\log p(Y,Z\mid\Theta)] + \log p(\Theta)$.
+Because the complete-data likelihood factorizes, this splits into independent
+problems:
+
+- **$\pi_0$**: closed form, $\pi_0 \propto \sum_i \gamma^{(i)}_1 + (\text{Dir. pseudo-counts})$.
+- **Static $A$**: closed form, $A[i,j] \propto \sum_t \xi_t(i,j)$, plus
+  `transition_stickiness` added to the diagonal as a pseudo-count.
+- **Input-driven $\theta$**: for each source state $i$ independently, a
+  responsibility-weighted multinomial logistic regression solved by L-BFGS,
+  $$
+  \min_{\theta_i} \; -\sum_t \sum_j \xi_t(i,j)\,\log A_t[i,j] \;+\; \text{penalty}.
+  $$
+- **Bernoulli / multinomial / neg. binomial / Gamma**: per state, a
+  $\gamma$-weighted GLM fit by L-BFGS. Dispersion parameters $\phi,\alpha$ are
+  optimized jointly with the weights in log space.
+- **Gaussian**: closed form. $W_k$ solves the weighted ridge system
+  $(X^\top\Gamma_k X + \Lambda)W_k = X^\top\Gamma_k Y$, with
+  $\Lambda = \mathrm{diag}(\rho)$ as above -- the bias row is penalised like every
+  other family's, not left free -- and
+  $\Sigma_k = \sum_n \gamma_{nk} r_n r_n^\top / \sum_n \gamma_{nk} + \epsilon I$
+  with $\epsilon = 10^{-3}$.
+
+Each of these was verified to (i) equal $-\sum_n \gamma_{nk}\log p(y_n\mid\cdot)
++ \text{penalty}$ exactly, and (ii) return a stationary point of that objective.
+The whole loop was verified to increase $\mathcal{F}$ monotonically.
+
+> **[X] Numerical M-step tolerances.** The GLM M-steps are iterative (L-BFGS,
+> default `tol=1e-3`), not exact maximizations — this is generalized EM.
+> Monotonicity of $\mathcal{F}$ still holds provided each M-step improves its
+> objective.
+
+> **[X] The returned parameters lag their own responsibilities.** $\Theta_{t+1}$
+> maximizes an objective built from the E-step at $\Theta_t$. At a true fixed
+> point the two coincide, but EM stops on a *log-likelihood* tolerance, so in
+> practice the returned $\hat\Theta$ is not a stationary point of the objective
+> rebuilt from a fresh E-step at $\hat\Theta$. Measured on a $K=4$ fit of a true
+> $K=3$ model, the gradient norms of the four transition factors at $\hat\Theta$
+> were $0.23$, $1.37$, $2.23$ and $0.34$ — not $\sim 10^{-10}$ as they are for a
+> single M-step in isolation. This is the assumption the Laplace step in
+> @sec-factorized depends on, and it is only approximately met. Tighten `tol` and
+> raise `num_em_iters` before trusting a Laplace-based evidence.
+
+> **[X] Dispersion epsilon.** The neg. binomial and Gamma objectives optimize
+> with $\phi + 10^{-6}$ (resp. $\alpha + 10^{-6}$) but *return* $\phi$ without
+> it, so the E-step scores a parameter $10^{-6}$ away from the one the M-step
+> optimized. The Gamma objective additionally mixes the two: its shape uses
+> $\alpha+10^{-6}$ while its rate is built from $\alpha$, so it is not exactly a
+> Gamma density for any single $\alpha$ (implied mean $\mu(1+10^{-6}/\alpha)$).
+> Relative effect $\sim 10^{-7}$; it floors the attainable gradient norm for
+> these two families at $\sim10^{-4}$. This is now the *only* precision floor in
+> the objectives: the observations previously carried a hardcoded
+> `astype(float32)` and now follow the dtype of the computation, so
+> `jax_enable_x64` is honoured end to end.
+
+> **[A] Local optima.** EM converges to a local optimum of a non-convex
+> objective. `fit_with_restarts` mitigates but does not solve this. Every
+> model-selection method below inherits this: a "better" $K$ may simply be a
+> better-initialized fit.
+
+> **[A] Label switching.** The likelihood is invariant to the $K!$ relabelings
+> of the states. Nothing in the package breaks this symmetry.
+
+---
+
+## Model selection {#sec-ms}
+
+### What we would like
+
+For comparing state counts we want the marginal likelihood
+
+$$
+p(Y \mid K) \;=\; \int \sum_{z_{1:T}} p(Y, z_{1:T} \mid \Theta)\; p(\Theta)\,\mathrm{d}\Theta ,
+$$
+
+which is intractable twice over: an exponential sum over paths inside a
+high-dimensional integral. The package offers three routes, in increasing order
+of ambition and of assumptions.
+
+### Cross-validation
+
+Two scoring rules are available: the plug-in predictive (`cross_validate_k`,
+below) and the posterior predictive (`posterior_predictive_cv`, @sec-ppcv). The
+plug-in rule is the most assumption-light option in the package. Fit on training
+data, report $\log p(Y_{\text{test}} \mid \hat\Theta_{\text{train}})$ from the
+exact forward pass, and pick the $K$ with the best mean held-out score.
+
+Two regimes:
+
+- **$S > 1$ sequences**: `KFold` over sequences. Held-out sequences are genuinely
+  independent of training, so this is a clean predictive estimate.
+- **$S = 1$ sequence**: `TimeSeriesSplit`, expanding window.
+
+> **[X] Plug-in predictive.** $\log p(Y_{\text{test}}\mid\hat\Theta)$ is a plug-in
+> score, not the posterior predictive $\log p(Y_{\text{test}}\mid Y_{\text{train}})$.
+> It ignores parameter uncertainty and so is optimistic, increasingly so for
+> large $K$.
+
+> **[A] Test segments restart the chain.** In the single-sequence regime the test
+> slice is treated as a fresh sequence beginning at $\pi_0$. The true filtered
+> state at the split point is discarded, which penalizes the model for
+> information it would actually have had. The bias grows with the persistence of
+> the chain.
+
+> **[!] Known defect (open).** `slice_single_sequence` slices transition inputs as
+> `x_trans[s-1 : e-1]` for a slice starting at $s$. For the training slice
+> ($s=0$) this is correct. For any slice with $s>0$ — i.e. every test slice — the
+> transition inputs are **shifted one step early**: the forward pass consumes
+> $u_{s-1},\dots$ where it needs $u_{s},\dots$. It does not raise, because the
+> length check only runs inside `fit_glmhmm`. Affects input-driven models under
+> `TimeSeriesSplit` only.
+
+> **[A] Fold configs.** Folds inherit the full base config (`_replace`), so
+> regularization and priors are held fixed across $K$. Because the penalties are
+> priors, comparing $K$ at fixed `l2_reg_*` compares models with *different*
+> effective prior mass; this is the conventional choice but it is a choice.
+
+#### Posterior-predictive CV {#sec-ppcv}
+
+`posterior_predictive_cv` replaces the plug-in score with the quantity it is
+standing in for, using the identity
+
+$$
+\log p(Y_{\text{test}} \mid Y_{\text{train}})
+= \log Z\big(Y_{\text{train}} \cup Y_{\text{test}}\big) - \log Z\big(Y_{\text{train}}\big),
+$$
+
+exact by definition of conditional probability. No posterior over $\Theta$ has to
+be represented or sampled — both terms come from the evidence estimators of
+@sec-factorized. This removes the two **[X]**/**[A]** items above: parameter
+uncertainty is integrated, not plugged in, so the score penalizes extra states
+on its own; and in the single-sequence case $Z(\text{union})$ is the marginal
+likelihood of the whole prefix, so the latent chain is carried across the split
+instead of being restarted at $\pi_0$.
+
+Two incidental benefits. $\log K!$ appears in both terms and **cancels exactly**,
+so the label-switching convention is irrelevant here. And both slices used start
+at index 0, so the transition-input misalignment that affects mid-sequence
+slices cannot arise.
+
+With multiple sequences the union is the whole dataset for every fold, so
+$Z(\text{union})$ is computed once and shared; fold scores are correlated
+through it and the reported spread reflects only the training-set evidences.
+
+> **[X] Inherits the evidence approximations.** The identity is exact; the two
+> terms are not. This is a difference of two independently approximated
+> quantities, each large relative to their difference, so the soft-count error
+> does not cancel systematically. Check the propagated estimator standard
+> deviation against the gaps between candidate $K$ before trusting a ranking.
+
+> **[A] Cost.** $n_{\text{folds}} + 1$ fits *and* evidence evaluations per $K$,
+> versus $n_{\text{folds}}$ fits for the plug-in score. The evidence
+> computation, not the fitting, dominates.
+
+Measured on 6 sequences of 150 trials from a true $K=3$ model, 3 folds:
+
+| $K$ | plug-in | posterior predictive |
+|---|---|---|
+| 2 | $-187.49 \pm 5.80$ | $-172.45 \pm 18.37$ |
+| **3** | $\mathbf{-177.72 \pm 3.60}$ | $\mathbf{-171.45 \pm 7.63}$ |
+| 4 | $-184.51 \pm 6.36$ | $-178.15 \pm 7.21$ |
+
+Both rank $K=3$ first, and every value lies inside $[-2 \cdot 150 \log 2,\ 0]$, the
+admissible range for a log predictive density over $2\times150$ binary trials --
+a check that the difference behaves like a density rather than an arbitrary
+number. The wider fold spread on the right is the cost of differencing two large
+estimates.
+
+**Why not sample a posterior directly?** The alternative is a Laplace posterior
+at $\hat\Theta$ and a Monte Carlo average of $p(Y_{\text{test}} \mid \Theta_s)$.
+Mechanically this is easy -- `compute_log_marginal_likelihood` is a differentiable
+`lax.scan`, the free-parameter count is small (9 to 35 for $K = 2,3,4$ here), and
+`jax.hessian` handles it. It fails on the model, not the machinery. Measured on a
+$K=2,3,4$ sweep: the gradient of the observed-data log posterior at $\hat\Theta$
+was $0.57$ at $K=3$ and the Hessian was **indefinite** (smallest eigenvalue
+$-0.17$), so there is no Laplace posterior to sample; where $-H$ *was* positive
+definite its smallest eigenvalues were $10^{-4}$ and $3\times10^{-5}$. Those
+near-flat directions are the singularity discussed in @sec-bic showing up again,
+and sampling along them makes the Monte Carlo average diverge upward -- the
+inflation was *larger* at $K=4$ than at $K=2$, i.e. it would push the score
+toward more states rather than fewer. The identity route avoids the problem by
+never needing a posterior.
+
+### BIC {#sec-bic}
+
+$$
+\mathrm{BIC} = k \log n - 2\log \hat{L}, \qquad \log \hat Z \approx -\tfrac{1}{2}\mathrm{BIC}.
+$$
+
+Free parameters $k$ are counted honestly against the identifiability
+constraints: $D_u K(K{-}1)$ for input-driven transitions or $K(K{-}1)$ for
+static, $K-1$ for $\pi_0$, $D(C{-}1)K$ for multinomial, $DMK + K\frac{M(M+1)}{2}$
+for Gaussian (weights plus covariances), and the obvious counts elsewhere.
+
+> **[X] Laplace/BIC regularity.** BIC is the $n \to \infty$
+> Laplace approximation to $\log p(Y)$ under a regular model with a flat prior.
+> **Mixture and hidden Markov models are singular** — the Fisher information is
+> rank deficient wherever states coincide or are unoccupied — so the standard BIC
+> derivation does not apply, and it typically **over-penalizes** state count.
+> This is directly observable here: the smallest eigenvalues of the observed-data
+> $-H$ at the fitted optimum came out at $10^{-4}$ ($K=2$) and $3\times10^{-5}$
+> ($K=4$), and at $K=3$ the matrix was indefinite outright.
+
+> **[X] MAP substituted for MLE.** $\hat L$ is the penalized (MAP) optimum, not
+> the maximum likelihood, and $k$ counts nominal rather than effective degrees of
+> freedom — regularization is not discounted.
+
+> **[A] Choice of $n$.** $n$ is taken as the number of *transitions*
+> $\sum_i (T_i - 1)$ when transition inputs are present, otherwise the number of
+> observations. With Gaussian data the number of samples $\gg$ the number of HMM
+> steps, and neither is obviously the right $n$.
+
+### Factorized evidence: the decomposition {#sec-factorized}
+
+This is the ambitious route, shared by both the BQ and SMC implementations. The
+derivation has three moves.
+
+**Move 1 — a variational bound over paths.** For any distribution $q(Z)$ over
+latent paths, Jensen gives a genuine lower bound
+
+$$
+\log p(Y) \;=\; \log \sum_Z p(Y,Z) \;\ge\; \mathbb{E}_q\big[\log p(Y,Z)\big] + \mathbb{H}[q],
+$$
+
+where $p(Y,Z) = \int p(Y,Z\mid\Theta)p(\Theta)\,\mathrm{d}\Theta$ is the
+*complete-data* marginal likelihood.
+
+**Move 2 — exact factorization given a path.** Conditioned on $Z$, the
+complete-data likelihood factorizes across parameter blocks, and if the prior
+also factorizes then so does the integral:
+
+$$
+p(Y,Z) \;=\; \underbrace{Z_{\pi_0}(Z)}_{\text{Dirichlet–multinomial}}
+\;\cdot\; \prod_{i=1}^{K} Z^{\text{trans}}_i(Z)
+\;\cdot\; \prod_{k=1}^{K} Z^{\text{glm}}_k(Z) .
+$$
+
+Each factor is a low-dimensional integral: one multinomial-logistic evidence per
+*source state*, one GLM evidence per *state*. This step is **exact** — it is the
+reason the whole scheme is tractable.
+
+**Move 3 — soft counts.** The factors depend on $Z$ only through counts. The
+code evaluates each factor at the *expected* counts rather than averaging the
+log-factor over the posterior over paths:
+
+$$
+\mathbb{E}_q\big[\log Z_\bullet(Z)\big] \;\longrightarrow\; \log Z_\bullet\big(\mathbb{E}_q[\text{counts}]\big),
+$$
+
+i.e. hard state indicators are replaced by responsibilities $\gamma_t(k)$ and
+hard transition counts by $\xi_t(i,j)$. Putting it together, the reported
+quantity is
+
+$$
+\boxed{\;\log \hat Z \;=\; \log Z_{\pi_0}(\bar\gamma) \;+\; \sum_i \log Z^{\text{trans}}_i(\bar\xi)
+\;+\; \sum_k \log Z^{\text{glm}}_k(\bar\gamma) \;+\; \mathbb{H}[q] \;}
+$$
+
+with the entropy computed as the exact identity
+
+$$
+\mathbb{H}[q] \;=\; \log p(Y\mid\hat\Theta) \;-\; \mathbb{E}_q\big[\log p(Y,Z\mid\hat\Theta)\big],
+$$
+
+which holds when $q$ is the exact posterior $p(Z\mid Y,\hat\Theta)$. This term is
+necessarily $\ge 0$ and is a useful correctness check on an implementation.
+
+Now the approximations.
+
+> **[X] Move 3 is not a bound and is the dominant approximation.** Swapping
+> $\mathbb{E}[\log Z(\cdot)]$ for $\log Z(\mathbb{E}[\cdot])$ is exact only if
+> $q$ is a point mass on one path. The further the state posterior is from
+> confident, the larger the error, and its sign is not guaranteed — so the final
+> number is **not** a lower bound on $\log p(Y)$ despite Move 1 being one. The
+> per-factor "likelihoods" use fractional observation counts and are not the
+> likelihood of any dataset.
+
+> **[X] $q$ is plugged in, not optimized.** $q = p(Z\mid Y,\hat\Theta_{\text{MAP}})$
+> from a single E-step, rather than a $q$ optimized jointly with a posterior over
+> $\Theta$ as in variational Bayes EM. The bound in Move 1 is therefore loose by
+> the KL between this $q$ and the true path posterior marginalized over $\Theta$.
+
+> **[A] Prior factorization.** The prior must factorize across the blocks for
+> Move 2 to hold. It does: independent Gaussians per weight, independent
+> Dirichlets per transition row.
+
+> **[A] $K!$ multiplicity is included.** The factorization expands around a
+> single labeling, but the parameter posterior has $K!$ symmetric modes, so
+> $\log K!$ is added to recover the full integral. Disable with
+> `include_label_switching=False` to compare specific labelled solutions — but
+> the setting must then match across BQ and SMC.
+
+> **[X] The expansion point is only approximately the mode.** Both estimators
+> assume the fitted parameters maximize the per-factor log-density they
+> integrate — for BQ this is essential, since it expands a Laplace approximation
+> there. Each M-step *in isolation* returns a stationary point of its own
+> objective (verified, gradient $\sim10^{-10}$). But the factors are rebuilt from
+> a fresh E-step, and by the staleness noted in @sec-em those are not the
+> responsibilities the M-step used: measured transition-factor gradients at
+> $\hat\Theta$ were $0.23$ to $2.23$ on a $K=4$ fit. The Laplace expansion is then
+> taken slightly off-mode, and the error grows the further EM stops from a fixed
+> point. The Gaussian factor does not rely on this at all: see
+> @sec-gauss-exact.
+
+### The Gaussian factor is exact {#sec-gauss-exact}
+
+The Gaussian emission factor is a responsibility-weighted multivariate linear
+regression, which is conjugate. Rather than approximating it, the package
+integrates it analytically over **both** $W$ and $\Sigma$, under
+
+$$
+W \mid \Sigma \sim \mathcal{MN}\big(0,\ \Lambda^{-1},\ \Sigma\big), \qquad
+\Sigma \sim \mathcal{IW}(\Psi, \nu),
+$$
+
+with $\Lambda = \mathrm{diag}(\rho)$, $\rho_0 = 1/\texttt{prior\_var\_bias\_emit}$
+and $\rho_{d>0} = \texttt{l2\_reg\_gauss}$. Writing
+$S_{xx} = X^\top\!\mathrm{diag}(w)X + \Lambda$, $S_{xy} = X^\top\!\mathrm{diag}(w)Y$,
+$S_{yy} = Y^\top\!\mathrm{diag}(w)Y$, $n = \sum_s w_s$ and
+$\Psi_N = \Psi + S_{yy} - S_{xy}^\top S_{xx}^{-1} S_{xy}$:
+
+$$
+\log Z = -\frac{nM}{2}\log\pi
++ \frac{M}{2}\big(\log|\Lambda| - \log|S_{xx}|\big)
++ \frac{\nu}{2}\log|\Psi| - \frac{\nu + n}{2}\log|\Psi_N|
++ \log\Gamma_M\!\Big(\frac{\nu+n}{2}\Big) - \log\Gamma_M\!\Big(\frac{\nu}{2}\Big).
+$$
+
+The per-sample weights $w_s$ are the state responsibilities, carrying the
+$1/(L_t M)$ factor of @sec-gauss-norm when the rescaling is active — the
+rescaling remains a per-sample weight, so the conjugate algebra is unaffected.
+
+Three consequences. The matrix-normal prior (column covariance $\Sigma$) is
+**not** an arbitrary choice: it is exactly the prior implied by the closed-form
+Gaussian M-step, whose normal equations are the stationarity condition of this
+density for any $\Sigma$. $\Sigma$ is integrated rather than plugged in, so the
+$K\,M(M{+}1)/2$ covariance parameters now carry an Occam penalty. And because
+this factor is exact, BQ and SMC return **identical** values for Gaussian-only
+models.
+
+> **[A] Inverse-Wishart hyperparameters.** Defaults are $\nu = M+2$, the smallest
+> integer degrees of freedom for which $\mathbb{E}[\Sigma] = \Psi/(\nu - M - 1)$
+> exists, and $\Psi = \texttt{iw\_scale\_gauss}\cdot I$ with
+> `iw_scale_gauss = 1.0`. **$\Psi$ carries the units of $y_{\text{gauss}}$
+> squared**: the default assumes roughly standardised Gaussian data, and should
+> be set to about the expected residual variance otherwise. The evidence is
+> sensitive to this choice, as it is to any prior on a parameter being
+> integrated.
+
+### Bayesian quadrature estimator
+
+For each factor with log-density $f(\vartheta)$ and mode $\hat\vartheta$
+(`run_bq_tinygp`):
+
+1. **Laplace.** $H = \nabla^2 f(\hat\vartheta)$, regularized to $H - 10^{-4}I$,
+   giving $\Sigma_L = (-H + 10^{-4}I)^{-1}$ and
+   $\log Z_{\text{Lap}} = f(\hat\vartheta) + \tfrac{d}{2}\log 2\pi - \tfrac12\log\det(-H_{\text{reg}})$.
+2. **Whiten and sample.** Draw $n$ samples from $q = \mathcal{N}(\hat\vartheta, \Sigma_L)$
+   and form the ratios $r(\vartheta) = \exp\big(f(\vartheta) - \log q(\vartheta) - \log Z_{\text{Lap}}\big)$,
+   so that $\mathbb{E}_q[r] = Z / Z_{\text{Lap}}$.
+3. **Quadrature.** Rather than the Monte Carlo mean, fit a GP to $r - \bar r$ in
+   whitened coordinates and integrate the GP posterior mean against
+   $\mathcal{N}(0,I)$ analytically, giving $\bar r + z^\top K^{-1}(r - \bar r)$
+   with $z_i = \int k(\cdot, x_i)\,\mathcal{N}(0,I)$.
+4. **Report** $\log Z_{\text{Lap}} + \log(\text{integral})$, plus a delta-method
+   variance $\mathrm{Var}[\log Z] \approx \mathrm{Var}[\hat I]/\hat I^2$.
+
+> **[X] Laplace as the base measure.** Step 1 assumes the factor posterior is
+> unimodal and well approximated by a Gaussian at the mode; the GP in step 3 only
+> corrects the *residual*. If the Laplace fit is poor the importance ratios have
+> heavy tails and the correction is unreliable.
+
+> **[X] GP hyperparameters are fitted, on a subset.** The `ExpSquared`
+> lengthscale and variance are obtained by maximizing the GP marginal likelihood
+> (`fit_gp_hyperparameters`) rather than left at $1.0$. Fitting uses a random
+> subset of at most 512 points, since each objective evaluation costs a dense
+> Cholesky. Disable with `tune_gp_hyperparameters=False`.
+>
+> Fitted lengthscales are typically 3–10 in whitened coordinates, well above the
+> old default of 1. That makes the Gram matrix strongly correlated, so the
+> Cholesky jitter is scaled to the kernel variance and escalated until the
+> factorization is finite (`stable_cholesky`) — JAX returns NaN rather than
+> raising, so this has to be checked explicitly. If conditioning fails anyway,
+> the factor degrades to the plain Monte Carlo mean and warns. Empirically the
+> tuned and untuned estimates agree to $\sim 0.005$ nats when the Laplace fit is
+> good, because a good fit leaves almost no residual for the GP to correct; the
+> tuning matters where the fit is poor.
+
+> **[X] Ratio sanitization.** Non-finite ratios must still be made finite
+> (`nan_to_num`, $+\infty \mapsto 10^{6}$), but the fraction sanitized is now
+> tracked and a `RuntimeWarning` is raised above 1%. A warning here means the
+> Laplace base measure is a poor fit and the factor's value should not be
+> trusted.
+
+> **[A] Cost.** $n = \mathrm{clip}(500 d,\ 2000,\ 8000)$ samples by default, then
+> a dense $n \times n$ Cholesky: $O(n^2)$ memory and $O(n^3)$ time **per factor
+> per state**. The ceiling (`max_samples`) bounds what was previously unbounded
+> growth in $d$; raising it improves quadrature accuracy at cubic cost.
+
+### Sequential Monte Carlo estimator
+
+Adaptive tempered SMC (`blackjax`) per factor: a particle population is
+transported along $p_\lambda(\vartheta) \propto p(\vartheta)\,
+p(\text{data}\mid\vartheta)^\lambda$ from $\lambda=0$ to $\lambda=1$, with the
+temperature ladder chosen adaptively to hold ESS at 50%, and NUTS or HMC
+rejuvenation between stages. The evidence is the telescoping product of
+normalizing-constant increments,
+$\log Z = \sum_m \log \mathbb{E}_{m-1}\big[\,\ell^{\lambda_m - \lambda_{m-1}}\big]$.
+
+> **[A] Particles are drawn from the prior.** The estimator's validity rests on
+> the $\lambda=0$ population being prior-distributed. Every prior in the module
+> is a product of independent zero-mean Gaussians, so `run_smc_factor` samples it
+> exactly via `diagonal_gaussian_prior_sampler` — no MCMC and no bias. This costs
+> tempering steps relative to starting at the MAP, which is the honest price of a
+> valid normalizing constant.
+
+> **[X] Fixed MCMC tuning.** Step size $0.5/\sqrt{d}$ and identity inverse mass
+> matrix, with no adaptation. Defaults are 150 particles and 10 rejuvenation
+> steps. If the tempering path is long, rejuvenation quality is what limits
+> accuracy.
+
+> **[A] Monte Carlo error.** A single call returns a point estimate.
+> `compute_factorized_evidence_smc_replicated` runs independent replicates and
+> reports mean and standard deviation — the number that differences in log
+> evidence between models must be compared against.
+
+### Which to trust
+
+| | CV (plug-in) | CV (posterior pred.) | BIC | BQ / SMC |
+|---|---|---|---|---|
+| Estimates | $\log p(Y_{\text{test}} \mid \hat\Theta)$ | $\log p(Y_{\text{test}} \mid Y_{\text{train}})$ | $\log p(Y)$, asymptotically | $\log p(Y)$, variationally |
+| Path sum | exact | soft-count **[X]** | exact | soft-count **[X]** |
+| Parameter integral | none | via the evidence | Laplace, $n\to\infty$ | BQ: Laplace+GP / SMC: tempered / Gaussian: exact |
+| Penalises extra states | **no** | yes | yes | yes |
+| Valid for singular models | yes | partly | **no** | partly |
+| Cost | folds $\times$ restarts fits | $(\text{folds}{+}1)\times$ (fit + evidence) | negligible | dominant |
+| Open defects | temporal-split shift | — | — | — |
+
+BQ and SMC now integrate the same model with the same priors, so they should
+agree to within Monte Carlo error. Measured on a 3-state Bernoulli model with
+input-driven transitions: BQ $-155.17$, SMC $-155.41 \pm 0.20$ over three
+replicates — a $0.24$ nat difference against a $0.20$ nat replicate spread. On
+Gaussian-only models they agree to $0.000$ nats, since every factor is then
+either closed-form conjugate or a Dirichlet–multinomial. **A disagreement much
+larger than the SMC replicate spread is a signal that one of the estimators is
+struggling, not a modelling result.**
+
+**Recommendation.** Plug-in CV over independent sequences is the most
+assumption-light option and sidesteps the soft-count substitution entirely — but
+it does not penalise extra states, and that is not a theoretical quibble.
+`tests/test_model_selection_bernoulli_input_driven.py` scores all three methods on
+one dataset generated from a true $K=3$ model (10 sequences of 250 trials, both
+transitions and emissions input-driven), higher being better throughout:
+
+| $K$ | CV test LL | implied $\log Z$ ($-\mathrm{BIC}/2$) | BQ $\log Z$ |
+|---|---|---|---|
+| 2 | $-312.70$ | $-1580.34$ | $-1570.92$ |
+| **3** | $-302.89$ | $\mathbf{-1559.06}$ | $\mathbf{-1534.89}$ |
+| 4 | $\mathbf{-300.93}$ | $-1619.00$ | $-1567.74$ |
+
+BIC and BQ recover $K=3$ by $21.3$ and $32.9$ nats respectively. Plug-in CV picks
+$K=4$ — but by $1.96$ nats against its own fold-to-fold spread of $\pm 8$ to
+$10$, so read it as indifference to the extra state rather than confidence in it,
+which is exactly what a score with no complexity penalty should do.
+
+So: use plug-in CV to check that a model predicts held-out data at all, and use
+the evidence — directly, or differenced through `posterior_predictive_cv` — to
+choose $K$. The factorized evidence earns its cost when sequences are few and
+long, where CV has little to hold out. Its remaining error is dominated by Move 3,
+not by the quadrature or the sampler, so effort spent tuning BQ or SMC settings
+buys less than effort spent making the state posterior confident.
+
+---
+
+## What has been checked numerically {#sec-verified}
+
+Claims of exactness above are not asserted from inspection. The following were
+checked against independent references; numbers are the observed agreement.
+
+| Claim | Reference used | Agreement |
+|---|---|---|
+| $\sum_t c_t = \log p(Y)$; $\gamma$, $\xi$ correct | exhaustive enumeration of all $K^T$ paths ($K{=}3$, $T{=}7$, time-varying $A_t$) | $\sim10^{-16}$ |
+| $\sum_j \xi_t(i,j) = \gamma_t(i)$, $\sum_i \xi_t(i,j) = \gamma_{t+1}(j)$ | same | $\sim10^{-16}$ |
+| Viterbi path and log-probability | exhaustive argmax over all paths | exact |
+| All five emission log-densities | `scipy.stats` | $\sim10^{-15}$ |
+| $A_t[i,j] = \mathrm{softmax}_j(u_t\cdot\theta)$ | direct construction | $\sim10^{-16}$ |
+| Each M-step objective $= -\sum_n \gamma_{nk}\log p + \text{penalty}$ | emission functions | exact (Bern, multinom); $\sim10^{-7}$ (NegBin, Gamma — the epsilon) |
+| M-step returns a stationary point | autodiff gradient of the exact objective | $\sim10^{-10}$; $\sim10^{-4}$ for NegBin/Gamma |
+| Gaussian $W$, $\Sigma$ closed forms | direct weighted ridge / weighted covariance | $\sim10^{-17}$ |
+| $\pi_0$ update is the Dirichlet MAP | direct computation | $\sim10^{-10}$ |
+| MAP-EM ascends $\mathcal{F}$ | 40 iterations of a real fit | min step $+6.8\times10^{-3}$ |
+| Gaussian factor closed form (@sec-gauss-exact) | 2-D numerical quadrature ($D{=}M{=}1$) | $2.8\times10^{-8}$ |
+| same, $M{=}2$ | $2\times10^5$ prior Monte Carlo draws | $0.047$ nats |
+| $\log\Gamma_M$ | `scipy.special.multigammaln` | $<10^{-10}$ |
+| Dirichlet–multinomial static transition evidence | analytic $\log B(\alpha+n)-\log B(\alpha)$ | exact to 2 dp |
+| BQ and SMC agree | 3-state Bernoulli, input-driven | $0.24$ nats vs SMC replicate sd $0.20$ |
+| same, Gaussian-only | — | $0.000$ nats (both exact there) |
+| $\log K!$ term | $\log 3! = 1.7918$ | $1.7917$ |
+| Posterior-predictive CV in range | $[-2T\log 2,\ 0]$ bound | satisfied at all $K$ |
+
+`tests/test_model_selection_bernoulli_input_driven.py` exercises CV, BIC and BQ
+together on one dataset with input-driven transitions *and* emissions.
+
+---
+
+## Summary of assumptions and approximations {#sec-summary}
+
+**Model**
+
+| | Item |
+|---|---|
+| **[A]** | Transition inputs aligned to $t \to t+1$, length $T-1$ |
+| **[A]** | Emission families conditionally independent given the state |
+| **[A]** | Column 0 of every design matrix is the bias |
+| **[A]** | Gaussian segments contiguous, ordered, tiling from index 0 |
+| **[A]** | Sequences mutually independent |
+| **[A]** | Log-link means clipped ($\le e^{20}$; Gamma also $\ge e^{-10}$) |
+| **[X]** | Gaussian pseudo-likelihood rescaling by $1/(L_t M)$ |
+
+**Inference and learning**
+
+| | Item |
+|---|---|
+| — | Forward–backward, posteriors and Viterbi are **exact** (verified) |
+| — | Every M-step optimises exactly the likelihood the E-step scores (verified) |
+| **[X]** | MAP not MLE; L2 penalties are Gaussian priors |
+| **[X]** | Generalized EM: M-steps are iterative to `tol`, not exact |
+| **[X]** | Returned parameters lag their own responsibilities by one M-step |
+| **[X]** | Dispersion $\pm 10^{-6}$ epsilon; Gamma shape/rate mixed |
+| **[A]** | Local optima; label switching unbroken |
+
+**Model selection**
+
+| | Item |
+|---|---|
+| **[X]** | CV (plug-in): ignores parameter uncertainty, no complexity penalty |
+| **[A]** | CV (plug-in): temporal test slices restart from $\pi_0$ |
+| **[!]** | CV (plug-in): transition inputs shifted one step in temporal test slices |
+| — | CV (posterior predictive): identity is **exact**; avoids all three above |
+| **[X]** | CV (posterior predictive): inherits the evidence approximations |
+| **[X]** | BIC: regularity assumption invalid for singular models |
+| **[X]** | BIC: MAP substituted for MLE, nominal d.o.f. |
+| **[A]** | BIC: ambiguous choice of $n$ |
+| — | Factorization given a path is **exact** |
+| — | Gaussian factor is **exact** (matrix-normal / inverse-Wishart conjugacy) |
+| **[X]** | Soft-count substitution — dominant error, not a bound |
+| **[X]** | $q(Z)$ plugged in from one E-step, not optimized |
+| **[A]** | Inverse-Wishart hyperparameters carry the units of $y_{\text{gauss}}$ |
+| **[A]** | $\log K!$ multiplicity included by default |
+| **[X]** | Laplace expansion point is only approximately the mode |
+| **[X]** | BQ: Laplace base measure; GP fitted on a $\le512$-point subset |
+| **[X]** | BQ: ratio sanitization and GP conditioning, both warned about |
+| **[X]** | SMC: fixed MCMC tuning; MC error needs replicates |
+
+Items marked **[!]** are defects rather than design choices. The only one
+outstanding is the transition-input shift in temporal CV splits; every
+**[!]** item in the factorized estimators has been resolved.

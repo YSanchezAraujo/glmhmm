@@ -33,7 +33,9 @@ def bernoulli_glmhmm_loglikelihood(
     logits_per_state = X @ _W
     log_prob_y_eq_1 = nn.log_sigmoid(logits_per_state)
     log_prob_y_eq_0 = nn.log_sigmoid(-logits_per_state)
-    y_col = y.astype(jnp.float32)[:, jnp.newaxis]
+    # follow the dtype of the computation rather than pinning to float32, so the
+    # likelihood keeps full precision when jax_enable_x64 is set
+    y_col = y.astype(logits_per_state.dtype)[:, jnp.newaxis]
     loglik_obs_bern= y_col * log_prob_y_eq_1 + (1 - y_col) * log_prob_y_eq_0
     return loglik_obs_bern
 
@@ -83,7 +85,7 @@ def negbin_glmhmm_loglikelihood(
     Computes Log-Likelihood for Negative Binomial GLM using stable log-space ops.
     """
     logits = X @ W  # (N, K)
-    log_mu = jnp.clip(logits, a_max=20.0)
+    log_mu = jnp.clip(logits, max=20.0)
     
     y_col = y[:, jnp.newaxis]
     phi_row = phi[jnp.newaxis, :]
@@ -121,7 +123,7 @@ def gamma_glmhmm_loglikelihood(
         Log likelihood of the data, shape (n_trials, n_states)
     """
     logits = X @ W
-    mu = jnp.exp(jnp.clip(logits, a_min=-10.0, a_max=20.0)) 
+    mu = jnp.exp(jnp.clip(logits, min=-10.0, max=20.0))
     y_col = y[:, jnp.newaxis]
     alpha_row = alpha[jnp.newaxis, :]
     beta = alpha_row / mu 
